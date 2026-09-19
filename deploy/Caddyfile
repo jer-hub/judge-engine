@@ -1,0 +1,9 @@
+{
+  http://localhost:3000 {
+    reverse_proxy frontend:3000
+  }
+
+  http://localhost:8000 {
+    reverse_proxy backend:8000
+  }
+}

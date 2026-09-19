@@ -1,0 +1,116 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #020617;
+  --foreground: #e2e8f0;
+  --admin-accent: #22c55e;
+  --admin-card: rgba(15, 23, 42, 0.72);
+  --admin-border: rgba(71, 85, 105, 0.65);
+}
+
+body {
+  color: var(--foreground);
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(16, 185, 129, 0.15), transparent),
+    var(--background);
+}
+
+.font-sans {
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: var(--font-mono), ui-monospace, monospace;
+}
+
+prose-invert pre {
+  background: #0f172a;
+}
+
+/* Quill (react-quill) dark theme */
+.rich-text-editor .ql-toolbar.ql-snow {
+  border: none;
+  border-bottom: 1px solid #1e293b;
+  background: rgba(2, 6, 23, 0.8);
+}
+
+.rich-text-editor .ql-container.ql-snow {
+  border: none;
+  font-size: 0.875rem;
+  color: #e2e8f0;
+}
+
+.rich-text-editor .ql-editor {
+  min-height: var(--rte-min-height, 220px);
+}
+
+.rich-text-editor .ql-editor.ql-blank::before {
+  color: #64748b;
+  font-style: normal;
+}
+
+.rich-text-editor .ql-snow .ql-stroke {
+  stroke: #94a3b8;
+}
+
+.rich-text-editor .ql-snow .ql-fill {
+  fill: #94a3b8;
+}
+
+.rich-text-editor .ql-snow .ql-picker {
+  color: #94a3b8;
+}
+
+.rich-text-editor .ql-snow .ql-picker-options {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+.rich-text-editor .ql-snow a {
+  color: #34d399;
+}
+
+.rich-text-editor .ql-editor pre.ql-syntax {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+
+@keyframes admin-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.admin-stagger > * {
+  animation: admin-fade-up 320ms ease-out both;
+}
+
+.admin-stagger > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.admin-stagger > *:nth-child(2) {
+  animation-delay: 50ms;
+}
+.admin-stagger > *:nth-child(3) {
+  animation-delay: 100ms;
+}
+.admin-stagger > *:nth-child(4) {
+  animation-delay: 150ms;
+}
+.admin-stagger > *:nth-child(5) {
+  animation-delay: 200ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-stagger > * {
+    animation: none;
+  }
+}

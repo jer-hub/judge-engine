@@ -1,0 +1,36 @@
+# Production-oriented overrides (use with: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d)
+services:
+  backend:
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    restart: unless-stopped
+
+  worker:
+    restart: unless-stopped
+    command: celery -A config worker --loglevel=info --concurrency=${JUDGE_CONCURRENCY:-4}
+
+  frontend:
+    command: npm run start -- --hostname 0.0.0.0 --port 3000
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
