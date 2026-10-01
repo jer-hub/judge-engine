@@ -34,6 +34,8 @@ WEAK_SECRET_KEYS = frozenset(
         "insecure-dev-only-change-me",
         "dev-only-change-me-to-a-long-random-string-32b+",
         "dev-only-insecure-key-do-not-use-in-prod-32chars",
+        # The .env.example placeholder is long enough to pass the length check.
+        "replace-with-a-long-random-secret-key-at-least-50-chars",
     }
 )
 
@@ -56,6 +58,24 @@ if not SECRET_KEY or SECRET_KEY in WEAK_SECRET_KEYS or len(SECRET_KEY) < 50:
         )
 
 ALLOWED_HOSTS = env("DJANGO_ALLOWED_HOSTS")
+
+# Public origin(s) allowed to POST forms to Django — the /admin/ login behind
+# Caddy fails Django's CSRF origin check without it. e.g. https://judge.example.edu
+CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
+
+if env.bool("DJANGO_BEHIND_TLS_PROXY", default=False):
+    # Caddy terminates TLS and sets X-Forwarded-Proto. Only Caddy and the
+    # frontend can reach the backend in prod, so the header is trustworthy.
+    # (No SECURE_SSL_REDIRECT: the frontend calls the backend over the
+    # internal network in plain HTTP; Caddy redirects public HTTP itself.)
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+if not DEBUG:
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+    X_FRAME_OPTIONS = "DENY"
 
 INSTALLED_APPS = [
     "django.contrib.admin",

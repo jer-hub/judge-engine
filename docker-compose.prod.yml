@@ -16,9 +16,13 @@ services:
     restart: unless-stopped
     environment:
       DJANGO_DEBUG: "False"
+      # TLS ends at Caddy; trust its X-Forwarded-Proto so Django knows it is HTTPS.
+      DJANGO_BEHIND_TLS_PROXY: "True"
     # Run the code baked into the image, not the host checkout.
     volumes: !override
       - media_data:/app/media
+    # Reached only through Caddy (and the frontend, on the compose network).
+    ports: !reset []
 
   worker:
     restart: unless-stopped
@@ -39,16 +43,30 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
   frontend:
-    command: npm run start -- --hostname 0.0.0.0 --port 3000
+    build:
+      context: ./frontend
+      target: runner
+      args:
+        # Same-origin behind Caddy (Django admin link becomes /admin/).
+        NEXT_PUBLIC_API_URL: ""
+    command: ["node", "server.js"]
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ""
+      JWT_COOKIE_SECURE: "true"
+    # Run the built image, not the host checkout (no node_modules volume either).
+    volumes: !reset []
+    ports: !reset []
 
   caddy:
     image: caddy:2-alpine
     ports:
       - "80:80"
       - "443:443"
+      - "443:443/udp"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
