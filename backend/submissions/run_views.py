@@ -81,7 +81,7 @@ class RunPreviewResultView(APIView):
             return Response(
                 {
                     "task_id": task_id,
-                    "status": "RuntimeError",
+                    "status": "SystemError",
                     "compile_error": "",
                     "stdout": "",
                     "stderr": "Preview failed. Please retry.",

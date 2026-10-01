@@ -94,6 +94,36 @@ public class Solution {
             self.assertEqual(resp.data["status"], Submission.Status.PENDING)
             mocked.assert_called_once()
 
+    def test_submission_saved_when_broker_is_down(self):
+        from unittest.mock import patch
+
+        self._auth(self.student)
+        with patch("judge.tasks.judge_submission.delay", side_effect=ConnectionError("redis down")):
+            resp = self.client.post(
+                reverse("submission-list"),
+                {"problem": self.problem.id, "source_code": "class Solution {}", "language": "java"},
+                format="json",
+            )
+        # Saved as Pending; the recovery sweep queues it once Redis is back.
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Submission.objects.get().status, Submission.Status.PENDING)
+
+    def test_student_cannot_read_another_students_submission(self):
+        other = User.objects.create_user(
+            username="student2", password="pass12345", role=User.Role.STUDENT
+        )
+        theirs = Submission.objects.create(
+            user=other, problem=self.problem, source_code="secret solution",
+            status=Submission.Status.ACCEPTED,
+        )
+        self._auth(self.student)
+        detail = self.client.get(reverse("submission-detail", args=[theirs.id]))
+        self.assertEqual(detail.status_code, status.HTTP_404_NOT_FOUND)
+        listing = self.client.get(reverse("submission-list"))
+        self.assertEqual(listing.status_code, status.HTTP_200_OK)
+        self.assertNotIn(theirs.id, [s["id"] for s in listing.data["results"]])
+        self.assertNotIn("secret solution", listing.content.decode())
+
     def test_no_public_register_endpoint(self):
         resp = self.client.post("/api/auth/register/", {"username": "x"}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)

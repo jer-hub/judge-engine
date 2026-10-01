@@ -22,6 +22,8 @@ env = environ.Env(
     JUDGE_OUTPUT_MAX_BYTES=(int, 4 * 1024 * 1024),
     JUDGE_IMAGE=(str, "eclipse-temurin:17-jdk-jammy"),
     JUDGE_CONCURRENCY=(int, 4),
+    JUDGE_STALE_SECONDS=(int, 900),
+    JUDGE_TASK_SOFT_LIMIT_S=(int, 600),
     SUBMISSION_THROTTLE_RATE=(str, "12/min"),
 )
 
@@ -223,8 +225,17 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_ROUTES = {
     "judge.tasks.judge_submission": {"queue": "judge"},
     "judge.tasks.preview_run": {"queue": "preview"},
+    "judge.tasks.recover_stuck_submissions": {"queue": "judge"},
     # Minutes of password hashing; keep it off the graded-judging queue.
     "accounts.tasks.import_users_task": {"queue": "preview"},
+}
+# Run by the beat scheduler embedded in the judge worker (`celery worker -B`).
+CELERY_BEAT_SCHEDULE = {
+    "recover-stuck-submissions": {
+        "task": "judge.tasks.recover_stuck_submissions",
+        "schedule": 60.0,
+        "options": {"queue": "judge", "expires": 55},
+    },
 }
 
 # Judge configuration
@@ -238,6 +249,12 @@ JUDGE_STDIN_MAX_BYTES = env("JUDGE_STDIN_MAX_BYTES")
 JUDGE_OUTPUT_MAX_BYTES = env("JUDGE_OUTPUT_MAX_BYTES")
 JUDGE_IMAGE = env("JUDGE_IMAGE")
 JUDGE_CONCURRENCY = env("JUDGE_CONCURRENCY")
+# A submission Judging (claimed) or Pending (queued) for longer than this is
+# treated as lost (worker crash, Redis restart) and re-enqueued by the sweep.
+JUDGE_STALE_SECONDS = env("JUDGE_STALE_SECONDS")
+# One judge task may not run longer than this; past it the submission becomes
+# SystemError (and is retried by the sweep) instead of blocking a worker.
+JUDGE_TASK_SOFT_LIMIT_S = env("JUDGE_TASK_SOFT_LIMIT_S")
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = (

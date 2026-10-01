@@ -60,6 +60,19 @@ class ContestFeaturesTests(APITestCase):
         token = RefreshToken.for_user(user).access_token
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
+    def test_problem_without_test_cases_is_rejected(self):
+        self._auth(self.admin)
+        empty = Problem.objects.create(
+            title="Empty", slug="empty-cp", statement="s", is_published=True, created_by=self.admin
+        )
+        resp = self.client.patch(
+            reverse("contest-detail", kwargs={"pk": self.contest.id}),
+            {"problems": [{"problem_id": empty.id, "letter": "A"}]},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Empty", str(resp.data["problems"]))
+
     def test_admin_can_set_contest_problems(self):
         self._auth(self.admin)
         published = Problem.objects.create(
@@ -69,6 +82,7 @@ class ContestFeaturesTests(APITestCase):
             is_published=True,
             created_by=self.admin,
         )
+        ProblemTestCase.objects.create(problem=published, input_data="", expected_output="x")
         resp = self.client.patch(
             reverse("contest-detail", kwargs={"pk": self.contest.id}),
             {

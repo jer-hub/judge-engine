@@ -6,6 +6,8 @@ import { apiFetch } from "@/lib/api";
 import type { Submission } from "@/lib/types";
 
 const PENDING = new Set(["Pending", "Judging"]);
+// The judge itself failed, not the student's code.
+const SYSTEM_ERROR = "SystemError";
 
 type Props = {
   submissionId: number | null;
@@ -18,7 +20,9 @@ export function SubmissionStatus({ submissionId }: Props) {
     enabled: !!submissionId,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      return status && PENDING.has(status) ? 1500 : false;
+      if (status && PENDING.has(status)) return 1500;
+      // The server re-judges SystemError on its own; check back now and then.
+      return status === SYSTEM_ERROR ? 15_000 : false;
     },
   });
 
@@ -80,12 +84,12 @@ export function VerdictBadge({ status }: { status: string }) {
   const color =
     status === "Accepted"
       ? "bg-emerald-900/60 text-emerald-300"
-      : PENDING.has(status)
+      : PENDING.has(status) || status === SYSTEM_ERROR
         ? "bg-amber-900/60 text-amber-200"
         : "bg-red-900/60 text-red-200";
   return (
     <span className={`rounded px-2 py-1 text-xs font-semibold ${color}`}>
-      {status}
+      {status === SYSTEM_ERROR ? "System Error" : status}
     </span>
   );
 }

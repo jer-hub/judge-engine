@@ -143,6 +143,8 @@ def _compute_scoreboard(
         ):
             cell["attempts"] += 1
         # CompileError: ignored entirely, as in ICPC — no attempt, no penalty.
+        # SystemError: the judge failed, not the student — ignored likewise
+        # (the recovery sweep re-judges it).
 
     rows = []
     for participant in participants:

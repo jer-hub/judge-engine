@@ -199,6 +199,12 @@ class ContestWriteSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"problems": "Duplicate problems are not allowed."}
                 )
+            # Without test cases every submission ends in SystemError.
+            untested = [p["problem_id"].title for p in problems if not p["problem_id"].test_cases.exists()]
+            if untested:
+                raise serializers.ValidationError(
+                    {"problems": "Add test cases before using: " + ", ".join(untested) + "."}
+                )
         return attrs
 
     @transaction.atomic

@@ -79,3 +79,23 @@ class ScoreboardTests(TestCase):
         self.assertEqual(standings[0]["penalty"], 30)
         self.assertEqual(standings[1]["username"], "bob")
         self.assertEqual(standings[1]["penalty"], 30)
+
+    def test_system_error_costs_no_attempt_or_penalty(self):
+        for status, minutes in (
+            (Submission.Status.SYSTEM_ERROR, 5),
+            (Submission.Status.ACCEPTED, 10),
+        ):
+            sub = Submission.objects.create(
+                user=self.u1, problem=self.problem, contest=self.contest,
+                source_code="x", status=status,
+            )
+            Submission.objects.filter(pk=sub.pk).update(
+                submitted_at=self.contest.start_time + timedelta(minutes=minutes)
+            )
+
+        row = build_scoreboard(self.contest, viewer=None)["standings"][0]
+        self.assertEqual(row["username"], "alice")
+        self.assertEqual(row["penalty"], 10)
+        cell = row["problems"][0]
+        self.assertEqual(cell["attempts"], 1)
+        self.assertFalse(cell["pending"])

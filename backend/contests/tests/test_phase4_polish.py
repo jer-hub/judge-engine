@@ -78,6 +78,8 @@ class ContestAdminPolishTests(APITestCase):
         )
         self.pa = Problem.objects.create(title="PA", slug="pa", statement="x", is_published=True)
         self.pb = Problem.objects.create(title="PB", slug="pb", statement="x", is_published=True)
+        for p in (self.pa, self.pb):
+            ProblemTestCase.objects.create(problem=p, input_data="", expected_output="x")
         ContestProblem.objects.create(contest=self.contest, problem=self.pa, letter="A")
         ContestProblem.objects.create(contest=self.contest, problem=self.pb, letter="B")
         ContestParticipant.objects.create(contest=self.contest, user=self.student)
@@ -105,6 +107,7 @@ class ContestAdminPolishTests(APITestCase):
 
     def test_new_problem_can_take_removed_letter(self):
         pc = Problem.objects.create(title="PC", slug="pc", statement="x", is_published=True)
+        ProblemTestCase.objects.create(problem=pc, input_data="", expected_output="x")
         self._as(self.admin)
         resp = self._set_problems([
             {"problem_id": self.pa.id, "letter": "A"},

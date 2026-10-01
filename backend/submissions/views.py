@@ -65,9 +65,11 @@ class SubmissionViewSet(
         serializer.is_valid(raise_exception=True)
         submission = serializer.save()
 
-        from judge.tasks import judge_submission
+        from judge.tasks import enqueue_judging
 
-        judge_submission.delay(submission.id)
+        # Never 500 once the submission is saved: if the broker is down it
+        # stays Pending and the recovery sweep queues it later.
+        enqueue_judging(submission.id)
 
         output = SubmissionSerializer(submission, context={"request": request})
         return Response(output.data, status=status.HTTP_201_CREATED)
@@ -88,11 +90,21 @@ class SubmissionViewSet(
         submission.status = Submission.Status.PENDING
         submission.compile_error = ""
         submission.judged_at = None
-        submission.save(update_fields=["status", "compile_error", "judged_at"])
+        # Dropping the claim makes any task still judging the old run discard
+        # its verdict instead of overwriting this one.
+        submission.judge_claim = None
+        submission.judging_started_at = None
+        submission.auto_rejudges = 0
+        submission.save(
+            update_fields=[
+                "status", "compile_error", "judged_at",
+                "judge_claim", "judging_started_at", "auto_rejudges",
+            ]
+        )
         submission.results.all().delete()
 
-        from judge.tasks import judge_submission
+        from judge.tasks import enqueue_judging
 
-        judge_submission.delay(submission.id)
+        enqueue_judging(submission.id)
         output = SubmissionSerializer(submission, context={"request": request})
         return Response(output.data)
