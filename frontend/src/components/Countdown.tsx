@@ -1,32 +1,52 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Props = {
   startTime: string;
   endTime: string;
   serverTime?: string;
+  /** Called when the contest starts or ends while the page is open. */
+  onPhaseChange?: () => void;
 };
 
-export function Countdown({ startTime, endTime, serverTime }: Props) {
-  const [now, setNow] = useState(() =>
-    serverTime ? new Date(serverTime).getTime() : Date.now(),
-  );
+type Phase = "upcoming" | "active" | "ended";
 
+export function Countdown({ startTime, endTime, serverTime, onPhaseChange }: Props) {
+  // Server clock minus this device's clock, fixed when the server time arrives.
+  // Reading Date.now() each tick (instead of adding 1 s per tick) keeps the
+  // countdown right even when a background tab's timers are throttled.
+  const [offset, setOffset] = useState(0);
   useEffect(() => {
-    const tick = setInterval(() => setNow((t) => t + 1000), 1000);
+    setOffset(serverTime ? new Date(serverTime).getTime() - Date.now() : 0);
+  }, [serverTime]);
+
+  const [now, setNow] = useState(() => Date.now() + offset);
+  useEffect(() => {
+    const update = () => setNow(Date.now() + offset);
+    update();
+    const tick = setInterval(update, 1000);
     return () => clearInterval(tick);
-  }, []);
+  }, [offset]);
 
   const start = new Date(startTime).getTime();
   const end = new Date(endTime).getTime();
+  const phase: Phase = now < start ? "upcoming" : now <= end ? "active" : "ended";
+
+  const lastPhase = useRef(phase);
+  useEffect(() => {
+    if (lastPhase.current !== phase) {
+      lastPhase.current = phase;
+      onPhaseChange?.();
+    }
+  }, [phase, onPhaseChange]);
 
   let label = "";
   let remaining = 0;
-  if (now < start) {
+  if (phase === "upcoming") {
     label = "Starts in";
     remaining = start - now;
-  } else if (now <= end) {
+  } else if (phase === "active") {
     label = "Ends in";
     remaining = end - now;
   } else {

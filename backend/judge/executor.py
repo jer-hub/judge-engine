@@ -5,15 +5,20 @@ import logging
 import os
 import shutil
 import socket
+import threading
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import docker
 from django.conf import settings
+from docker.types import LogConfig
 
 logger = logging.getLogger("judge")
+
+OUTPUT_LIMIT_MESSAGE = "Output limit exceeded."
 
 
 @dataclass(frozen=True)
@@ -25,6 +30,7 @@ class RunResult:
     exit_code: int | None
     timed_out: bool = False
     oom_killed: bool = False
+    output_limit_exceeded: bool = False
 
 
 class JudgeExecutor:
@@ -107,6 +113,7 @@ class JudgeExecutor:
                     memory_limit_mb=memory_limit_mb,
                     stdin_data=tc["input_data"],
                     work_writable=False,
+                    time_limit_ms=time_limit_ms,
                 )
                 verdict = self._classify_run(run, tc["expected_output"])
                 results.append(
@@ -199,12 +206,15 @@ class JudgeExecutor:
                 memory_limit_mb=memory_limit_mb,
                 stdin_data=stdin if stdin is not None else "",
                 work_writable=False,
+                time_limit_ms=time_limit_ms,
             )
 
             if run.timed_out:
                 status = "TimeLimitExceeded"
             elif run.oom_killed:
                 status = "MemoryLimitExceeded"
+            elif run.output_limit_exceeded:
+                status = "OutputLimitExceeded"
             elif run.exit_code not in (0,):
                 status = "RuntimeError"
             else:
@@ -228,15 +238,22 @@ class JudgeExecutor:
         memory_limit_mb: int,
         stdin_data: str | None,
         work_writable: bool,
+        time_limit_ms: int | None = None,
     ) -> RunResult:
-        container = None
-        start = time.monotonic()
+        """Run one sandboxed process.
+
+        ``time_limit_s`` is the wall-clock hard kill. ``time_limit_ms``, when
+        given, is the problem's limit, checked against the process lifetime
+        Docker reports (StartedAt..FinishedAt), so container setup is excluded.
+        """
+        api = self.client.api
+        container_id = None
+        sock = None
+        pump = None
+        wants_stdin = stdin_data is not None
         try:
-            container = self.client.containers.create(
-                image=self.image,
-                command=command,
-                working_dir="/work",
-                volumes={
+            host_config = api.create_host_config(
+                binds={
                     host_workspace: {
                         "bind": "/work",
                         "mode": "rw" if work_writable else "ro",
@@ -251,59 +268,110 @@ class JudgeExecutor:
                 nano_cpus=1_000_000_000,
                 pids_limit=64,
                 tmpfs={"/tmp": "size=16m,mode=1777"},
-                user="1000:1000",
-                stdin_open=stdin_data is not None,
-                tty=False,
-                detach=True,
+                # Only /tmp (size-capped tmpfs) and, during compile, /work are
+                # writable — nothing can grow the container layer on host disk.
+                read_only=True,
+                # Output is read from the attach stream below; Docker keeps no
+                # log file, so a print loop cannot fill the host disk.
+                log_config=LogConfig(type=LogConfig.types.NONE),
                 cap_drop=["ALL"],
                 security_opt=["no-new-privileges:true"],
             )
-            container.start()
+            config = api.create_container_config(
+                image=self.image,
+                command=command,
+                user="1000:1000",
+                working_dir="/work",
+                stdin_open=wants_stdin,
+                tty=False,
+                detach=True,
+                host_config=host_config,
+            )
+            # Without StdinOnce Docker never closes the process's stdin when we
+            # half-close, so EOF-driven readers (Scanner.hasNext) hang until TLE.
+            # docker-py has no kwarg for it, hence the raw config edit.
+            config["StdinOnce"] = wants_stdin
+            container_id = api.create_container_from_config(config)["Id"]
 
-            if stdin_data is not None:
-                # Brief delay so the JVM process is ready to accept stdin.
-                time.sleep(0.15)
-                self._feed_stdin(container, stdin_data)
+            # Attach before start so no output is missed and stdin is buffered
+            # by the daemon — no need to sleep while the JVM boots.
+            sock = api.attach_socket(
+                container_id,
+                params={
+                    "stdin": int(wants_stdin),
+                    "stdout": 1,
+                    "stderr": 1,
+                    "stream": 1,
+                },
+            )
+            raw = sock._sock if hasattr(sock, "_sock") else sock
+            pump = _OutputPump(raw, settings.JUDGE_OUTPUT_MAX_BYTES)
+            pump.start()
+
+            start = time.monotonic()
+            api.start(container_id)
+            if wants_stdin:
+                self._feed_stdin(raw, stdin_data)
 
             deadline = start + time_limit_s
-            exit_code = None
-            while time.monotonic() < deadline:
-                container.reload()
-                if container.status not in ("created", "running"):
-                    exit_code = container.attrs["State"].get("ExitCode", -1)
+            state: dict = {}
+            killed_for = None
+            while True:
+                state = api.inspect_container(container_id).get("State", {})
+                if state.get("Status") not in ("created", "running"):
+                    break
+                if pump.overflowed:
+                    killed_for = "output"
+                elif time.monotonic() >= deadline:
+                    killed_for = "wall"
+                if killed_for:
+                    try:
+                        api.kill(container_id)
+                    except docker.errors.APIError:
+                        pass
+                    state = api.inspect_container(container_id).get("State", {})
                     break
                 time.sleep(0.05)
-            else:
-                try:
-                    container.kill()
-                except Exception:
-                    pass
-                elapsed_ms = int((time.monotonic() - start) * 1000)
-                logs = self._safe_logs(container)
-                logger.info(
-                    "Container timed out cmd=%s elapsed_ms=%s", command, elapsed_ms
-                )
+
+            wall_ms = int((time.monotonic() - start) * 1000)
+            pump.join(timeout=2)
+            stdout, stderr = pump.text()
+
+            if killed_for == "wall":
+                logger.info("Container timed out cmd=%s elapsed_ms=%s", command, wall_ms)
                 return RunResult(
                     verdict="TimeLimitExceeded",
-                    stdout=logs["stdout"],
-                    stderr=logs["stderr"],
-                    execution_time_ms=elapsed_ms,
+                    stdout=stdout,
+                    stderr=stderr,
+                    execution_time_ms=wall_ms,
                     exit_code=None,
                     timed_out=True,
                 )
 
-            elapsed_ms = int((time.monotonic() - start) * 1000)
-            state = container.attrs.get("State", {})
-            oom = bool(state.get("OOMKilled"))
-            logs = self._safe_logs(container)
+            elapsed_ms = _process_runtime_ms(state)
+            if elapsed_ms is None:
+                elapsed_ms = wall_ms
+            over_limit = time_limit_ms is not None and elapsed_ms > time_limit_ms
 
+            if killed_for == "output" or pump.overflowed:
+                return RunResult(
+                    verdict="OutputLimitExceeded",
+                    stdout=stdout,
+                    stderr=(stderr + "\n" + OUTPUT_LIMIT_MESSAGE).lstrip(),
+                    execution_time_ms=elapsed_ms,
+                    exit_code=state.get("ExitCode"),
+                    output_limit_exceeded=True,
+                )
+
+            exit_code = state.get("ExitCode")
             return RunResult(
                 verdict="OK",
-                stdout=logs["stdout"],
-                stderr=logs["stderr"],
+                stdout=stdout,
+                stderr=stderr,
                 execution_time_ms=elapsed_ms,
                 exit_code=exit_code if exit_code is not None else -1,
-                oom_killed=oom,
+                timed_out=over_limit,
+                oom_killed=bool(state.get("OOMKilled")),
             )
         except docker.errors.APIError as exc:
             logger.exception("Docker API error: %s", exc)
@@ -315,38 +383,29 @@ class JudgeExecutor:
                 exit_code=None,
             )
         finally:
-            if container is not None:
+            if sock is not None:
                 try:
-                    container.remove(force=True)
+                    sock.close()
+                except Exception:
+                    pass
+            if container_id is not None:
+                try:
+                    api.remove_container(container_id, force=True)
                 except Exception:
                     logger.warning("Failed to remove container", exc_info=True)
 
-    def _feed_stdin(self, container, stdin_data: str) -> None:
-        """Push stdin then half-close so Java sees EOF. Input never hits the workspace FS."""
-        sock = container.attach_socket(
-            params={"stdin": 1, "stream": 1, "stdout": 0, "stderr": 0}
-        )
-        try:
-            raw = sock._sock if hasattr(sock, "_sock") else sock
-            payload = stdin_data.encode("utf-8")
-            raw.sendall(payload)
-            try:
-                raw.shutdown(socket.SHUT_WR)
-            except OSError:
-                pass
-        finally:
-            try:
-                sock.close()
-            except Exception:
-                pass
+    def _feed_stdin(self, raw_sock, stdin_data: str) -> None:
+        """Push stdin then half-close so Java sees EOF. Input never hits the workspace FS.
 
-    def _safe_logs(self, container) -> dict[str, str]:
+        The socket stays open for reading; the output pump owns it from here.
+        """
         try:
-            out = container.logs(stdout=True, stderr=False)
-            err = container.logs(stdout=False, stderr=True)
-            return {"stdout": _decode(out), "stderr": _decode(err)}
-        except Exception:
-            return {"stdout": "", "stderr": ""}
+            raw_sock.sendall(stdin_data.encode("utf-8"))
+            raw_sock.shutdown(socket.SHUT_WR)
+        except OSError:
+            # The process exited (or closed stdin) before reading everything —
+            # legitimate for programs that ignore input. Judge on its output.
+            logger.debug("stdin closed early by sandboxed process", exc_info=True)
 
     def _classify_run(self, run: RunResult, expected_output: str) -> str:
         if run.timed_out:
@@ -355,11 +414,86 @@ class JudgeExecutor:
             return "MemoryLimitExceeded"
         if run.verdict == "RuntimeError":
             return "RuntimeError"
+        if run.output_limit_exceeded:
+            # No dedicated verdict in the model; oversized output is never correct.
+            return "WrongAnswer"
         if run.exit_code not in (0,):
             return "RuntimeError"
         if normalize_output(run.stdout) == normalize_output(expected_output):
             return "Accepted"
         return "WrongAnswer"
+
+
+class _OutputPump(threading.Thread):
+    """Demultiplex a non-TTY Docker attach stream into capped stdout/stderr buffers.
+
+    Frames are ``[stream(1) 0 0 0 size(4, big-endian)] payload``. Once the
+    combined output passes ``max_bytes`` the pump flags ``overflowed`` and
+    discards further data (the caller kills the container).
+    """
+
+    def __init__(self, sock, max_bytes: int) -> None:
+        super().__init__(daemon=True)
+        self._sock = sock
+        self._max = max_bytes
+        self._bufs = {1: bytearray(), 2: bytearray()}
+        self._total = 0
+        self.overflowed = False
+
+    def run(self) -> None:
+        pending = bytearray()
+        try:
+            while True:
+                chunk = self._sock.recv(65536)
+                if not chunk:
+                    break
+                pending += chunk
+                while len(pending) >= 8:
+                    size = int.from_bytes(pending[4:8], "big")
+                    if len(pending) < 8 + size:
+                        break
+                    self._append(pending[0], pending[8 : 8 + size])
+                    del pending[: 8 + size]
+        except OSError:
+            pass
+
+    def _append(self, stream: int, payload: bytes) -> None:
+        if self.overflowed or stream not in self._bufs:
+            return
+        room = self._max - self._total
+        if len(payload) > room:
+            self._bufs[stream] += payload[:room]
+            self._total = self._max
+            self.overflowed = True
+            return
+        self._bufs[stream] += payload
+        self._total += len(payload)
+
+    def text(self) -> tuple[str, str]:
+        return _decode(bytes(self._bufs[1])), _decode(bytes(self._bufs[2]))
+
+
+def _parse_docker_time(value: str | None) -> datetime | None:
+    # Docker emits RFC 3339 with nanoseconds ("...T10:00:00.123456789Z");
+    # fromisoformat only takes microseconds.
+    if not value or value.startswith("0001-"):
+        return None
+    value = value.rstrip("Z")
+    if "." in value:
+        head, frac = value.split(".", 1)
+        value = f"{head}.{frac[:6].ljust(6, '0')}"
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _process_runtime_ms(state: dict) -> int | None:
+    started = _parse_docker_time(state.get("StartedAt"))
+    finished = _parse_docker_time(state.get("FinishedAt"))
+    if started is None or finished is None or finished < started:
+        return None
+    return int((finished - started).total_seconds() * 1000)
 
 
 def _decode(raw) -> str:

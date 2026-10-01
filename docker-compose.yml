@@ -1,14 +1,31 @@
+# Rotate container logs (Docker's default json-file driver never does).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+# Celery worker is answering its control channel.
+x-worker-healthcheck: &worker-healthcheck
+  test: ["CMD-SHELL", "celery -A config inspect ping -d $${CELERY_NODE}@$$HOSTNAME --timeout 10 | grep -q pong"]
+  interval: 30s
+  timeout: 20s
+  start_period: 30s
+  retries: 3
+
 services:
   db:
     image: postgres:16-alpine
+    logging: *default-logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-judge_engine}
       POSTGRES_USER: ${POSTGRES_USER:-judge}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-judge_dev_password}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # Loopback only - never expose the database to the LAN.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-judge} -d ${POSTGRES_DB:-judge_engine}"]
       interval: 5s
@@ -17,8 +34,10 @@ services:
 
   redis:
     image: redis:7-alpine
+    logging: *default-logging
+    # Loopback only - Redis has no auth and is the Celery broker.
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -28,6 +47,7 @@ services:
   backend:
     build:
       context: ./backend
+    logging: *default-logging
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py collectstatic --noinput &&
@@ -46,6 +66,13 @@ services:
       - media_data:/app/media
     ports:
       - "8000:8000"
+    healthcheck:
+      # Host "backend" must be in DJANGO_ALLOWED_HOSTS (it is in .env.example).
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/healthz/', headers={'Host': 'backend'}), timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
     depends_on:
       db:
         condition: service_healthy
@@ -55,7 +82,10 @@ services:
   worker:
     build:
       context: ./backend
-    command: celery -A config worker --loglevel=info --concurrency=2
+    logging: *default-logging
+    # Root: needs the Docker socket (root-equivalent regardless of the user).
+    user: "0"
+    command: celery -A config worker -Q judge,celery --loglevel=info --concurrency=2 -n judge@%h
     env_file:
       - .env
     environment:
@@ -65,10 +95,12 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       JUDGE_DATA_DIR: /judge_data
       JUDGE_HOST_DATA_DIR: ${JUDGE_HOST_DATA_DIR:-./judge_data}
+      CELERY_NODE: judge
     volumes:
       - ./backend:/app
       - ./judge_data:/judge_data
       - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck: *worker-healthcheck
     depends_on:
       db:
         condition: service_healthy
@@ -77,9 +109,39 @@ services:
       backend:
         condition: service_started
 
+  # Practice "Run" previews only, so they never delay graded submissions.
+  worker-preview:
+    build:
+      context: ./backend
+    logging: *default-logging
+    user: "0"
+    command: celery -A config worker -Q preview --loglevel=info --concurrency=1 -n preview@%h
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      JUDGE_DATA_DIR: /judge_data
+      JUDGE_HOST_DATA_DIR: ${JUDGE_HOST_DATA_DIR:-./judge_data}
+      CELERY_NODE: preview
+    volumes:
+      - ./backend:/app
+      - ./judge_data:/judge_data
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck: *worker-healthcheck
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   frontend:
     build:
       context: ./frontend
+      target: dev
+    logging: *default-logging
     command: npm run dev -- --hostname 0.0.0.0 --port 3000
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
@@ -90,6 +152,12 @@ services:
       - frontend_node_modules:/app/node_modules
     ports:
       - "3000:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/login >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
     depends_on:
       - backend
 

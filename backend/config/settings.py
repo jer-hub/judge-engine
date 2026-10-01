@@ -19,6 +19,7 @@ env = environ.Env(
     JUDGE_WALL_TIMEOUT_MULTIPLIER=(int, 3),
     JUDGE_SOURCE_MAX_BYTES=(int, 65536),
     JUDGE_STDIN_MAX_BYTES=(int, 16384),
+    JUDGE_OUTPUT_MAX_BYTES=(int, 4 * 1024 * 1024),
     JUDGE_IMAGE=(str, "eclipse-temurin:17-jdk-jammy"),
     JUDGE_CONCURRENCY=(int, 4),
     SUBMISSION_THROTTLE_RATE=(str, "12/min"),
@@ -33,6 +34,8 @@ WEAK_SECRET_KEYS = frozenset(
         "insecure-dev-only-change-me",
         "dev-only-change-me-to-a-long-random-string-32b+",
         "dev-only-insecure-key-do-not-use-in-prod-32chars",
+        # The .env.example placeholder is long enough to pass the length check.
+        "replace-with-a-long-random-secret-key-at-least-50-chars",
     }
 )
 
@@ -55,6 +58,24 @@ if not SECRET_KEY or SECRET_KEY in WEAK_SECRET_KEYS or len(SECRET_KEY) < 50:
         )
 
 ALLOWED_HOSTS = env("DJANGO_ALLOWED_HOSTS")
+
+# Public origin(s) allowed to POST forms to Django — the /admin/ login behind
+# Caddy fails Django's CSRF origin check without it. e.g. https://judge.example.edu
+CSRF_TRUSTED_ORIGINS = env.list("DJANGO_CSRF_TRUSTED_ORIGINS", default=[])
+
+if env.bool("DJANGO_BEHIND_TLS_PROXY", default=False):
+    # Caddy terminates TLS and sets X-Forwarded-Proto. Only Caddy and the
+    # frontend can reach the backend in prod, so the header is trustworthy.
+    # (No SECURE_SSL_REDIRECT: the frontend calls the backend over the
+    # internal network in plain HTTP; Caddy redirects public HTTP itself.)
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+
+if not DEBUG:
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+    X_FRAME_OPTIONS = "DENY"
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -160,12 +181,19 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ],
+    # Requests arrive via the Next.js proxy, which forwards the client IP as the
+    # last X-Forwarded-For entry; trust exactly that one hop. Without it every
+    # anon throttle (login included) is one bucket for the whole school.
+    "NUM_PROXIES": env.int("DRF_NUM_PROXIES", default=1),
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/min",
         "user": "120/min",
         "submissions": env("SUBMISSION_THROTTLE_RATE"),
         "runs": "20/min",
-        "login": "5/min",
+        # Per IP: generous, since a lab behind NAT can share one address.
+        "login": env("LOGIN_IP_THROTTLE_RATE", default="30/min"),
+        # Per username: the real brute-force cap.
+        "login-user": env("LOGIN_USER_THROTTLE_RATE", default="5/min"),
         "logout": "10/min",
         "user-import": "6/min",
     },
@@ -176,6 +204,10 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env("JWT_REFRESH_DAYS")),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
+    # Tokens carry a hash of the password; changing it rejects every token
+    # issued before, so an admin reset ends an attacker's session at once.
+    "CHECK_REVOKE_TOKEN": True,
+    "REVOKE_TOKEN_CLAIM": "hash_password",
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
@@ -186,6 +218,14 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+# Previews get their own queue/worker so practice runs never delay graded
+# submissions. The judge worker also drains the legacy default queue.
+CELERY_TASK_ROUTES = {
+    "judge.tasks.judge_submission": {"queue": "judge"},
+    "judge.tasks.preview_run": {"queue": "preview"},
+    # Minutes of password hashing; keep it off the graded-judging queue.
+    "accounts.tasks.import_users_task": {"queue": "preview"},
+}
 
 # Judge configuration
 JUDGE_DEFAULT_TIME_LIMIT_MS = env("JUDGE_DEFAULT_TIME_LIMIT_MS")
@@ -194,6 +234,8 @@ JUDGE_COMPILE_TIMEOUT_S = env("JUDGE_COMPILE_TIMEOUT_S")
 JUDGE_WALL_TIMEOUT_MULTIPLIER = env("JUDGE_WALL_TIMEOUT_MULTIPLIER")
 JUDGE_SOURCE_MAX_BYTES = env("JUDGE_SOURCE_MAX_BYTES")
 JUDGE_STDIN_MAX_BYTES = env("JUDGE_STDIN_MAX_BYTES")
+# Combined stdout+stderr cap per run; beyond it the container is killed.
+JUDGE_OUTPUT_MAX_BYTES = env("JUDGE_OUTPUT_MAX_BYTES")
 JUDGE_IMAGE = env("JUDGE_IMAGE")
 JUDGE_CONCURRENCY = env("JUDGE_CONCURRENCY")
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")

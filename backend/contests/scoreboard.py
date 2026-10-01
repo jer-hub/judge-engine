@@ -36,7 +36,15 @@ def build_scoreboard(contest: Contest, viewer=None) -> dict[str, Any]:
         except Exception:
             pass
 
-    payload = _compute_scoreboard(contest, viewer=viewer, reveal_frozen=is_admin)
+    # Students all get the same freeze-respecting board (it is cached under one
+    # shared key), so no viewer's own post-freeze results are revealed here;
+    # they still see their own verdicts on the submissions page.
+    payload = _compute_scoreboard(contest, reveal_frozen=is_admin)
+    if not is_admin and contest.status == "upcoming":
+        # Don't reveal the problem set before the start.
+        payload["problems"] = []
+        for row in payload["standings"]:
+            row["problems"] = []
 
     if not is_admin:
         try:
@@ -59,7 +67,6 @@ def invalidate_scoreboard_cache(contest_id: int) -> None:
 
 def _compute_scoreboard(
     contest: Contest,
-    viewer=None,
     reveal_frozen: bool = False,
 ) -> dict[str, Any]:
     problems = list(
@@ -107,7 +114,6 @@ def _compute_scoreboard(
             apply_freeze
             and freeze_at is not None
             and sub.submitted_at >= freeze_at
-            and (viewer is None or sub.user_id != viewer.id)
         )
 
         if hidden_by_freeze:
@@ -136,22 +142,21 @@ def _compute_scoreboard(
             Submission.Status.RUNTIME_ERROR,
         ):
             cell["attempts"] += 1
-        # CompileError typically does not add ICPC penalty in many contests;
-        # we still count it as a non-AC attempt without penalty bump beyond attempts.
-        elif sub.status == Submission.Status.COMPILE_ERROR:
-            cell["attempts"] += 1
+        # CompileError: ignored entirely, as in ICPC — no attempt, no penalty.
 
     rows = []
     for participant in participants:
         uid = participant.user_id
         solved = 0
         penalty = 0
+        last_solve_min = 0
         cells = []
         for cp in problems:
             cell = state[uid][cp.problem_id]
             if cell["solved"]:
                 solved += 1
                 penalty += cell["penalty"]
+                last_solve_min = max(last_solve_min, cell["solve_time_min"])
             cells.append(
                 {
                     "letter": letter_by_problem[cp.problem_id],
@@ -167,13 +172,20 @@ def _compute_scoreboard(
                 "username": participant.user.username,
                 "solved": solved,
                 "penalty": penalty,
+                "last_solve_min": last_solve_min,
                 "problems": cells,
             }
         )
 
-    rows.sort(key=lambda r: (-r["solved"], r["penalty"], r["username"]))
-    for i, row in enumerate(rows, start=1):
-        row["rank"] = i
+    # ICPC: more solved, then less penalty, then earlier last accepted solve.
+    # Rows still equal on all three share a rank (username only orders them).
+    def standing(r):
+        return (-r["solved"], r["penalty"], r["last_solve_min"])
+
+    rows.sort(key=lambda r: (*standing(r), r["username"]))
+    for i, row in enumerate(rows):
+        same_as_prev = i > 0 and standing(row) == standing(rows[i - 1])
+        row["rank"] = rows[i - 1]["rank"] if same_as_prev else i + 1
 
     return {
         "contest_id": contest.id,

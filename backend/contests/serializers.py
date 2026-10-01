@@ -105,24 +105,42 @@ class ContestDetailSerializer(serializers.ModelSerializer):
     def get_server_time(self, obj: Contest) -> str:
         return timezone.now().isoformat()
 
+    def to_representation(self, instance: Contest):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        is_admin = bool(request and getattr(request.user, "is_platform_admin", False))
+        # The problem set (titles, tags, limits) is part of the contest secret
+        # until it starts; statements are already gated in contests/access.py.
+        if not is_admin and instance.status == "upcoming":
+            data["problems"] = []
+        if not is_admin:
+            # Students don't need (and shouldn't get) the full roster.
+            data["participant_count"] = len(data.pop("participants", []))
+        return data
+
 
 def sync_contest_problems(contest: Contest, items: list[dict]) -> None:
     """Replace contest problem set; omit deletes letters not in payload."""
-    keep_ids: list[int] = []
+    keep_problem_ids = [item["problem_id"].id for item in items]
+    ContestProblem.objects.filter(contest=contest).exclude(
+        problem_id__in=keep_problem_ids
+    ).delete()
+    # Park the kept rows on placeholder letters first, so letters can be
+    # swapped (A<->B) or reused without tripping unique (contest, letter)
+    # partway through. The whole save runs in one transaction.
+    for i, cp in enumerate(ContestProblem.objects.filter(contest=contest)):
+        cp.letter = f"~{i}"
+        cp.save(update_fields=["letter"])
     for item in items:
-        problem = item["problem_id"]
-        letter = item["letter"].strip().upper()
-        cp, _ = ContestProblem.objects.update_or_create(
+        ContestProblem.objects.update_or_create(
             contest=contest,
-            problem=problem,
+            problem=item["problem_id"],
             defaults={
-                "letter": letter,
+                "letter": item["letter"].strip().upper(),
                 "display_order": item.get("display_order", 0),
                 "points": item.get("points", 100),
             },
         )
-        keep_ids.append(cp.id)
-    ContestProblem.objects.filter(contest=contest).exclude(id__in=keep_ids).delete()
 
 
 class ContestWriteSerializer(serializers.ModelSerializer):
@@ -156,6 +174,18 @@ class ContestWriteSerializer(serializers.ModelSerializer):
         if start and end and end <= start:
             raise serializers.ValidationError(
                 {"end_time": "End time must be after start time."}
+            )
+        freeze = attrs.get("freeze_scoreboard_minutes_before_end")
+        if freeze is None and self.instance is not None:
+            freeze = self.instance.freeze_scoreboard_minutes_before_end
+        if freeze and start and end and freeze * 60 >= (end - start).total_seconds():
+            raise serializers.ValidationError(
+                {
+                    "freeze_scoreboard_minutes_before_end": (
+                        "Freeze must be shorter than the contest, "
+                        "or the scoreboard is frozen from the start."
+                    )
+                }
             )
         problems = attrs.get("problems")
         if problems is not None:

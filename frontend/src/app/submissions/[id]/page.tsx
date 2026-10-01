@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { VerdictBadge } from "@/components/SubmissionStatus";
-import { apiFetch } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import type { Submission, User } from "@/lib/types";
 
 export default function SubmissionDetailPage() {
@@ -29,9 +31,14 @@ export default function SubmissionDetailPage() {
     },
   });
 
+  const [confirmForce, setConfirmForce] = useState(false);
+
   const rejudge = useMutation({
-    mutationFn: () =>
-      apiFetch<Submission>(`/submissions/${id}/rejudge/`, { method: "POST" }),
+    mutationFn: (force: boolean = false) =>
+      apiFetch<Submission>(
+        `/submissions/${id}/rejudge/${force ? "?force=true" : ""}`,
+        { method: "POST" },
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["submission", id] });
       void queryClient.invalidateQueries({ queryKey: ["admin", "submissions"] });
@@ -71,7 +78,7 @@ export default function SubmissionDetailPage() {
             <button
               type="button"
               disabled={rejudge.isPending}
-              onClick={() => rejudge.mutate()}
+              onClick={() => rejudge.mutate(false)}
               className="cursor-pointer rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-60"
             >
               {rejudge.isPending ? "Rejudging…" : "Rejudge"}
@@ -81,8 +88,33 @@ export default function SubmissionDetailPage() {
       </div>
 
       {rejudge.isError && (
-        <p className="text-sm text-red-300">{(rejudge.error as Error).message}</p>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-red-300">
+          <p>{(rejudge.error as Error).message}</p>
+          {/* 409 = already queued/judging; stuck after a worker crash → force. */}
+          {rejudge.error instanceof ApiError && rejudge.error.status === 409 && (
+            <button
+              type="button"
+              onClick={() => setConfirmForce(true)}
+              className="cursor-pointer rounded border border-red-800 px-3 py-1 text-red-200 hover:bg-red-950/50"
+            >
+              Force rejudge
+            </button>
+          )}
+        </div>
       )}
+
+      <ConfirmDialog
+        open={confirmForce}
+        title="Force rejudge?"
+        body="Use this only if the submission is stuck (for example after a judge worker crashed). If it is still being judged, both runs will write results."
+        confirmLabel="Force rejudge"
+        danger
+        onConfirm={() => {
+          setConfirmForce(false);
+          rejudge.mutate(true);
+        }}
+        onCancel={() => setConfirmForce(false)}
+      />
 
       {data.compile_error && (
         <pre className="overflow-x-auto rounded-lg bg-red-950/40 p-4 text-xs text-red-200">

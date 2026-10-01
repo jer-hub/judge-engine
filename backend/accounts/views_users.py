@@ -1,18 +1,34 @@
+import redis
+from celery.result import AsyncResult
+from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q
+from django.http import Http404
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
-from accounts.permissions import IsAdmin
+from accounts.permissions import CanModifyTargetUser, IsAdmin
 
 from .csv_import import MAX_CSV_CHARS, parse_roster_csv
 from .models import User
 from .serializers import UserSerializer
+from .sessions import revoke_user_sessions
+
+# How long an import's owner record (and so its result) stays fetchable.
+IMPORT_OWNER_TTL_SECONDS = 3600
+
+
+def _redis_client():
+    return redis.from_url(settings.REDIS_URL, decode_responses=True)
+
+
+def _import_owner_key(task_id: str) -> str:
+    return f"import-owner:{task_id}"
 
 
 class UserImportThrottle(ScopedRateThrottle):
@@ -44,6 +60,17 @@ class AdminUserWriteSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
+        request = self.context.get("request")
+        if self.instance is not None and request and self.instance.pk == request.user.pk:
+            # Don't let an admin lock themselves (possibly the last admin) out.
+            if "role" in attrs and attrs["role"] != User.Role.ADMIN:
+                raise serializers.ValidationError(
+                    {"role": "You cannot remove your own admin role."}
+                )
+            if attrs.get("is_active") is False:
+                raise serializers.ValidationError(
+                    {"is_active": "You cannot deactivate your own account."}
+                )
         password = attrs.get("password")
         if password:
             user = self.instance or User(
@@ -67,16 +94,26 @@ class AdminUserWriteSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
+        deactivating = instance.is_active and validated_data.get("is_active") is False
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         if password:
             instance.set_password(password)
         instance.save()
+        if password or deactivating:
+            revoke_user_sessions(instance)
         return instance
 
 
 class PasswordResetSerializer(serializers.Serializer):
     password = serializers.CharField(min_length=8)
+
+    def validate_password(self, value: str) -> str:
+        try:
+            validate_password(value, user=self.context.get("user"))
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages)) from exc
+        return value
 
 
 class UserImportSerializer(serializers.Serializer):
@@ -106,7 +143,7 @@ def _format_row_errors(serializer_errors) -> str:
 class UserViewSet(viewsets.ModelViewSet):
     """Admin-only roster management (no public registration)."""
 
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [IsAuthenticated, IsAdmin, CanModifyTargetUser]
     queryset = User.objects.all().order_by("username")
 
     def get_serializer_class(self):
@@ -142,10 +179,12 @@ class UserViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="reset-password")
     def reset_password(self, request, pk=None):
         user = self.get_object()
-        serializer = PasswordResetSerializer(data=request.data)
+        serializer = PasswordResetSerializer(data=request.data, context={"user": user})
         serializer.is_valid(raise_exception=True)
         user.set_password(serializer.validated_data["password"])
         user.save(update_fields=["password"])
+        # A reset usually means the account was compromised: end its sessions.
+        revoke_user_sessions(user)
         return Response({"detail": "Password updated."})
 
     @action(
@@ -156,6 +195,9 @@ class UserViewSet(viewsets.ModelViewSet):
         throttle_classes=[UserImportThrottle],
     )
     def import_users(self, request):
+        """Dry runs answer inline (no hashing, fast). Real imports hash every
+        password (~0.3 s each), far past gunicorn's timeout for a class-sized
+        roster, so they run as a Celery task: 202 + task_id, then poll."""
         serializer = UserImportSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         csv_text = serializer.validated_data["csv_text"]
@@ -166,80 +208,122 @@ class UserViewSet(viewsets.ModelViewSet):
         except ValueError as exc:
             raise serializers.ValidationError({"csv_text": str(exc)}) from exc
 
-        created = 0
-        skipped = 0
-        failed = 0
-        created_usernames: list[str] = []
-        errors: list[dict] = []
+        if dry_run:
+            return Response(run_import(parsed, dry_run=True))
 
-        for row in parsed:
-            username = (row.data.get("username") or "").strip()
-            if row.error:
-                failed += 1
-                if len(errors) < 100:
-                    errors.append(
-                        {"row": row.line_no, "username": username, "error": row.error}
-                    )
-                continue
+        from .tasks import import_users_task
 
-            if User.objects.filter(username__iexact=username).exists():
-                skipped += 1
-                continue
-
-            payload = {
-                **row.data,
-                "role": User.Role.STUDENT,
-            }
-            write = AdminUserWriteSerializer(data=payload)
-            if not write.is_valid():
-                failed += 1
-                if len(errors) < 100:
-                    errors.append(
-                        {
-                            "row": row.line_no,
-                            "username": username,
-                            "error": _format_row_errors(write.errors),
-                        }
-                    )
-                continue
-
-            if dry_run:
-                created += 1
-                created_usernames.append(username)
-                continue
-
-            try:
-                with transaction.atomic():
-                    # Re-check inside the savepoint to avoid TOCTOU miscounts
-                    if User.objects.filter(username__iexact=username).exists():
-                        skipped += 1
-                        continue
-                    user = write.save()
-            except IntegrityError:
-                skipped += 1
-                continue
-            except Exception:
-                failed += 1
-                if len(errors) < 100:
-                    errors.append(
-                        {
-                            "row": row.line_no,
-                            "username": username,
-                            "error": "Could not create user.",
-                        }
-                    )
-                continue
-
-            created += 1
-            created_usernames.append(user.username)
-
-        return Response(
-            {
-                "created": created,
-                "skipped": skipped,
-                "failed": failed,
-                "dry_run": dry_run,
-                "created_usernames": created_usernames,
-                "errors": errors,
-            }
+        async_result = import_users_task.delay(csv_text=csv_text)
+        _redis_client().setex(
+            _import_owner_key(async_result.id), IMPORT_OWNER_TTL_SECONDS, request.user.id
         )
+        return Response(
+            {"task_id": async_result.id, "status": "Pending"},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path=r"import/(?P<task_id>[\w-]+)",
+        url_name="import-result",
+    )
+    def import_result(self, request, task_id: str):
+        owner = _redis_client().get(_import_owner_key(task_id))
+        if owner is None or owner != str(request.user.id):
+            raise Http404
+
+        result = AsyncResult(task_id)
+        if result.state in ("PENDING", "RECEIVED"):
+            return Response({"task_id": task_id, "status": "Pending"})
+        if result.state in ("STARTED", "RETRY"):
+            return Response({"task_id": task_id, "status": "Running"})
+        if result.state != "SUCCESS":
+            return Response(
+                {
+                    "task_id": task_id,
+                    "status": "Failed",
+                    "detail": "Import failed. Check which accounts exist, then retry; "
+                    "existing usernames are skipped.",
+                }
+            )
+        return Response({"task_id": task_id, "status": "Done", **(result.result or {})})
+
+
+def run_import(parsed, dry_run: bool) -> dict:
+    """Create student accounts from parsed CSV rows; returns the summary."""
+    created = 0
+    skipped = 0
+    failed = 0
+    created_usernames: list[str] = []
+    errors: list[dict] = []
+
+    for row in parsed:
+        username = (row.data.get("username") or "").strip()
+        if row.error:
+            failed += 1
+            if len(errors) < 100:
+                errors.append(
+                    {"row": row.line_no, "username": username, "error": row.error}
+                )
+            continue
+
+        if User.objects.filter(username__iexact=username).exists():
+            skipped += 1
+            continue
+
+        payload = {
+            **row.data,
+            "role": User.Role.STUDENT,
+        }
+        write = AdminUserWriteSerializer(data=payload)
+        if not write.is_valid():
+            failed += 1
+            if len(errors) < 100:
+                errors.append(
+                    {
+                        "row": row.line_no,
+                        "username": username,
+                        "error": _format_row_errors(write.errors),
+                    }
+                )
+            continue
+
+        if dry_run:
+            created += 1
+            created_usernames.append(username)
+            continue
+
+        try:
+            with transaction.atomic():
+                # Re-check inside the savepoint to avoid TOCTOU miscounts
+                if User.objects.filter(username__iexact=username).exists():
+                    skipped += 1
+                    continue
+                user = write.save()
+        except IntegrityError:
+            skipped += 1
+            continue
+        except Exception:
+            failed += 1
+            if len(errors) < 100:
+                errors.append(
+                    {
+                        "row": row.line_no,
+                        "username": username,
+                        "error": "Could not create user.",
+                    }
+                )
+            continue
+
+        created += 1
+        created_usernames.append(user.username)
+
+    return {
+        "created": created,
+        "skipped": skipped,
+        "failed": failed,
+        "dry_run": dry_run,
+        "created_usernames": created_usernames,
+        "errors": errors,
+    }

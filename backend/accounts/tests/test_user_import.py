@@ -1,10 +1,13 @@
 import json
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from accounts.tasks import import_users_task
 
 User = get_user_model()
 
@@ -23,7 +26,40 @@ class UserImportApiTests(APITestCase):
             role=User.Role.STUDENT,
         )
         self.url = reverse("user-import")
+        # Real imports run as a Celery task: run it eagerly and serve its
+        # result to the poll endpoint, with a dict standing in for Redis.
+        self.results = {}
+        owners = {}
 
+        def delay(**kwargs):
+            result = import_users_task.apply(kwargs=kwargs)
+            self.results[result.id] = result
+            return result
+
+        class FakeRedis:
+            def setex(self, key, _ttl, value):
+                owners[key] = str(value)
+
+            def get(self, key):
+                return owners.get(key)
+
+        for target, kwargs in (
+            ("accounts.tasks.import_users_task.delay", {"side_effect": delay}),
+            ("accounts.views_users._redis_client", {"return_value": FakeRedis()}),
+            ("accounts.views_users.AsyncResult", {"side_effect": lambda tid: self.results[tid]}),
+        ):
+            patcher = patch(target, **kwargs)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _import(self, csv_text):
+        """POST a real import, then poll it the way the admin UI does."""
+        resp = self.client.post(self.url, {"csv_text": csv_text, "dry_run": False}, format="json")
+        self.assertEqual(resp.status_code, status.HTTP_202_ACCEPTED, resp.data)
+        poll = self.client.get(reverse("user-import-result", args=[resp.data["task_id"]]))
+        self.assertEqual(poll.status_code, status.HTTP_200_OK)
+        self.assertEqual(poll.data["status"], "Done")
+        return poll
     def _auth(self, user):
         token = RefreshToken.for_user(user).access_token
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
@@ -50,8 +86,7 @@ class UserImportApiTests(APITestCase):
             "carol,pass12345,Carol,,\n"
         )
         before = User.objects.count()
-        resp = self.client.post(self.url, {"csv_text": csv_text, "dry_run": False}, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        resp = self._import(csv_text)
         self.assertEqual(resp.data["created"], 3)
         self.assertEqual(resp.data["skipped"], 0)
         self.assertEqual(resp.data["failed"], 0)
@@ -71,8 +106,7 @@ class UserImportApiTests(APITestCase):
             "exists,pass12345\n"
             "short,pass\n"
         )
-        resp = self.client.post(self.url, {"csv_text": csv_text}, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        resp = self._import(csv_text)
         self.assertEqual(resp.data["created"], 1)
         self.assertEqual(resp.data["skipped"], 1)
         self.assertEqual(resp.data["failed"], 1)
@@ -105,8 +139,7 @@ class UserImportApiTests(APITestCase):
         self._auth(self.admin)
         secret = "SuperSecret99"
         csv_text = f"username,password\necho_user,{secret}\nbaduser,short\n"
-        resp = self.client.post(self.url, {"csv_text": csv_text}, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        resp = self._import(csv_text)
         body = json.dumps(resp.data)
         self.assertNotIn(secret, body)
         self.assertNotIn("short", body)
@@ -114,8 +147,7 @@ class UserImportApiTests(APITestCase):
     def test_common_password_rejected(self):
         self._auth(self.admin)
         csv_text = "username,password\nweakuser,password\n"
-        resp = self.client.post(self.url, {"csv_text": csv_text}, format="json")
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        resp = self._import(csv_text)
         self.assertEqual(resp.data["created"], 0)
         self.assertEqual(resp.data["failed"], 1)
         self.assertFalse(User.objects.filter(username="weakuser").exists())

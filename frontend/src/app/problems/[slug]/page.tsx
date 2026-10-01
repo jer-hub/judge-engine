@@ -1,14 +1,20 @@
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { CodeEditor, JAVA_STUB } from "@/components/CodeEditor";
 import { StatementContent } from "@/components/StatementContent";
 import { SubmissionStatus, VerdictBadge } from "@/components/SubmissionStatus";
 import { ApiError, apiFetch } from "@/lib/api";
-import type { ProblemDetail, RunPreview, Submission } from "@/lib/types";
+import { draftKey, loadDraft, saveDraft } from "@/lib/drafts";
+import type { ProblemDetail, RunPreview, Submission, User } from "@/lib/types";
+
+const RUN_POLL_INTERVAL_MS = 700;
+const RUN_POLL_TIMEOUT_MS = 90_000;
+const RUN_PENDING = ["Pending", "Running"];
+const RUN_POLL_MAX_FAILURES = 3;
 
 function ProblemDetailInner() {
   const params = useParams<{ slug: string }>();
@@ -21,21 +27,39 @@ function ProblemDetailInner() {
   const [submissionId, setSubmissionId] = useState<number | null>(null);
   const [runResult, setRunResult] = useState<RunPreview | null>(null);
 
+  // Stop polling a Run once the student leaves the page.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
   const { data: problem, isLoading, error } = useQuery({
     queryKey: ["problem", slug],
     queryFn: () => apiFetch<ProblemDetail>(`/problems/${slug}/`),
   });
 
-  useEffect(() => {
-    const key = `draft:${slug}`;
-    const saved = localStorage.getItem(key);
-    if (saved) setCode(saved);
-  }, [slug]);
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => apiFetch<User>("/auth/me/"),
+    retry: false,
+  });
+  const storageKey = me && slug ? draftKey(me.id, contestId, slug) : null;
+  // Only save once this key's draft is loaded, so the stub never overwrites it.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!slug) return;
-    localStorage.setItem(`draft:${slug}`, code);
-  }, [code, slug]);
+    if (!storageKey) return;
+    setCode(loadDraft(storageKey) ?? JAVA_STUB);
+    setLoadedKey(storageKey);
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageKey || loadedKey !== storageKey) return;
+    saveDraft(storageKey, code);
+  }, [code, storageKey, loadedKey]);
 
   useEffect(() => {
     if (!problem || stdinReady) return;
@@ -59,8 +83,8 @@ function ProblemDetailInner() {
   });
 
   const run = useMutation({
-    mutationFn: () =>
-      apiFetch<RunPreview>("/runs/", {
+    mutationFn: async () => {
+      const queued = await apiFetch<RunPreview>("/runs/", {
         method: "POST",
         body: JSON.stringify({
           problem: problem!.id,
@@ -68,7 +92,35 @@ function ProblemDetailInner() {
           language: "java",
           stdin,
         }),
-      }),
+      });
+      // The judge runs asynchronously; poll until it reports a final status.
+      const deadline = Date.now() + RUN_POLL_TIMEOUT_MS;
+      let failures = 0;
+      while (Date.now() < deadline && mounted.current) {
+        await new Promise((r) => setTimeout(r, RUN_POLL_INTERVAL_MS));
+        let res: RunPreview;
+        try {
+          res = await apiFetch<RunPreview>(`/runs/${queued.task_id}/`);
+          failures = 0;
+        } catch (err) {
+          // 404: the run expired or isn't ours — retrying won't help.
+          // Anything else (network blip, 502 during a restart) is retried.
+          if (err instanceof ApiError && err.status === 404) throw err;
+          if (++failures >= RUN_POLL_MAX_FAILURES) throw err;
+          continue;
+        }
+        if (!RUN_PENDING.includes(res.status)) return res;
+      }
+      // Not a verdict on the code: the queue was too busy to get to it.
+      return {
+        task_id: queued.task_id,
+        status: "JudgeBusy",
+        compile_error: "",
+        stdout: "",
+        stderr: "The judge is busy and didn't run your code yet. Try again in a moment.",
+        execution_time_ms: null,
+      } satisfies RunPreview;
+    },
     onSuccess: (data) => setRunResult(data),
   });
 

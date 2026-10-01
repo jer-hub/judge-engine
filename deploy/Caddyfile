@@ -1,9 +1,27 @@
-{
-  http://localhost:3000 {
-    reverse_proxy frontend:3000
-  }
+# Single public entry point. SITE_ADDRESS (from .env) is the hostname students
+# use, e.g. judge.example.edu — Caddy then obtains and renews a TLS certificate
+# automatically (ports 80/443 must be reachable). "localhost" uses Caddy's
+# internal CA, handy for testing; an http:// prefix disables TLS entirely.
+{$SITE_ADDRESS:localhost} {
+	encode gzip
 
-  http://localhost:8000 {
-    reverse_proxy backend:8000
-  }
+	# Django admin and its static assets (served by WhiteNoise).
+	@django path /admin /admin/* /static/*
+	handle @django {
+		reverse_proxy backend:8000
+	}
+
+	# Everything else is the Next.js app. The browser talks to Django only
+	# through its /api/proxy and /api/auth routes, never to /api directly.
+	handle {
+		reverse_proxy frontend:3000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
 }

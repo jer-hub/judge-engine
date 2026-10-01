@@ -3,6 +3,14 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
+/** Where the middleware sent the user from — local paths only (no open redirect). */
+function safeNextPath(next: string | null) {
+  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
+    return "/problems";
+  }
+  return next.startsWith("/login") ? "/problems" : next;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
@@ -25,7 +33,7 @@ export default function LoginPage() {
         setError(data.detail || "Login failed");
         return;
       }
-      router.push("/problems");
+      router.push(safeNextPath(new URLSearchParams(window.location.search).get("next")));
       router.refresh();
     } catch {
       setError("Could not reach the server");

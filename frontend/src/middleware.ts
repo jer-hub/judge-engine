@@ -23,8 +23,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const access = request.cookies.get("je_access")?.value;
-  if (!access) {
+  // The access cookie expires with its token (~1h); a live refresh cookie
+  // still means a session — the API proxy renews the access token on use.
+  const hasSession =
+    request.cookies.has("je_access") || request.cookies.has("je_refresh");
+  if (!hasSession) {
     const login = new URL("/login", request.url);
     login.searchParams.set("next", pathname);
     return NextResponse.redirect(login);

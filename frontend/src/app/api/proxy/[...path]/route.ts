@@ -1,27 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import {
-  accessCookieName,
   backendBase,
-  cookieOptions,
+  clearAuthCookies,
+  clientIp,
+  forwardedHeaders,
   getAccessToken,
-  refreshCookieName,
+  getRefreshToken,
+  refreshTokens,
+  setAuthCookies,
+  type RefreshResult,
 } from "@/lib/auth-cookies";
-import { cookies } from "next/headers";
-
-async function refreshAccess(): Promise<string | null> {
-  const jar = await cookies();
-  const refresh = jar.get(refreshCookieName())?.value;
-  if (!refresh) return null;
-  const res = await fetch(`${backendBase()}/api/auth/refresh/`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh }),
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.access as string;
-}
+import { rejectCrossOrigin } from "@/lib/same-origin";
 
 export async function GET(
   req: NextRequest,
@@ -59,6 +49,9 @@ export async function DELETE(
 }
 
 async function proxy(req: NextRequest, pathParts: string[]) {
+  const refused = rejectCrossOrigin(req);
+  if (refused) return refused;
+
   // Django APPEND_SLASH cannot redirect POST while keeping the body — always use a trailing slash.
   let path = pathParts.join("/");
   if (path && !path.endsWith("/")) {
@@ -67,8 +60,19 @@ async function proxy(req: NextRequest, pathParts: string[]) {
   const search = req.nextUrl.search || "";
   const url = `${backendBase()}/api/${path}${search}`;
 
+  const ip = clientIp(req);
   let access = await getAccessToken();
-  const headers = new Headers();
+  const refresh = await getRefreshToken();
+  let result: RefreshResult | null = null;
+
+  // Access cookie expired (its maxAge matches the token's) but the session is
+  // still alive: renew before calling, rather than spending a 401 round trip.
+  if (!access && refresh) {
+    result = await refreshTokens(refresh, ip);
+    if (result.ok) access = result.tokens.access;
+  }
+
+  const headers = forwardedHeaders(ip);
   const contentType = req.headers.get("content-type");
   if (contentType) headers.set("Content-Type", contentType);
   if (access) headers.set("Authorization", `Bearer ${access}`);
@@ -81,28 +85,26 @@ async function proxy(req: NextRequest, pathParts: string[]) {
   };
 
   let upstream = await fetch(url, init);
-  if (upstream.status === 401) {
-    access = await refreshAccess();
-    if (access) {
-      headers.set("Authorization", `Bearer ${access}`);
+  if (upstream.status === 401 && refresh && result === null) {
+    result = await refreshTokens(refresh, ip);
+    if (result.ok) {
+      headers.set("Authorization", `Bearer ${result.tokens.access}`);
       upstream = await fetch(url, { ...init, headers });
-      const response = new NextResponse(upstream.body, {
-        status: upstream.status,
-        headers: {
-          "Content-Type":
-            upstream.headers.get("Content-Type") || "application/json",
-        },
-      });
-      response.cookies.set(accessCookieName(), access, cookieOptions(60 * 60));
-      return response;
     }
   }
 
-  return new NextResponse(upstream.body, {
+  const response = new NextResponse(upstream.body, {
     status: upstream.status,
     headers: {
       "Content-Type":
         upstream.headers.get("Content-Type") || "application/json",
     },
   });
+  if (result?.ok) {
+    setAuthCookies(response, result.tokens);
+  } else if (result?.reason === "invalid") {
+    // Dead session: drop the cookies so the middleware sends the user to /login.
+    clearAuthCookies(response);
+  }
+  return response;
 }
