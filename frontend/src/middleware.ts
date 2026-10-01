@@ -5,7 +5,7 @@ const PUBLIC_PATHS = ["/login"];
 const PUBLIC_PREFIXES = ["/api/"];
 
 export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+  const { pathname, search } = request.nextUrl;
 
   if (
     PUBLIC_PATHS.includes(pathname) ||
@@ -29,7 +29,9 @@ export function middleware(request: NextRequest) {
     request.cookies.has("je_access") || request.cookies.has("je_refresh");
   if (!hasSession) {
     const login = new URL("/login", request.url);
-    login.searchParams.set("next", pathname);
+    // Keep the query: /problems/x?contest=3 must come back with its contest,
+    // or the submission silently counts as practice.
+    login.searchParams.set("next", pathname + search);
     return NextResponse.redirect(login);
   }
 

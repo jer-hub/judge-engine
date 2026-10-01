@@ -72,6 +72,8 @@ export function ProblemsPanel() {
     run_all_tests: false,
   });
   const [formError, setFormError] = useState<string | null>(null);
+  // The slug follows the title until the admin types one of their own.
+  const [slugEdited, setSlugEdited] = useState(false);
 
   useEffect(() => {
     setPage(1);
@@ -138,6 +140,7 @@ export function ProblemsPanel() {
     onSuccess: () => {
       setFormOpen(false);
       setFormError(null);
+      setSlugEdited(false);
       setForm({
         title: "",
         slug: "",
@@ -215,7 +218,7 @@ export function ProblemsPanel() {
                 setForm((prev) => ({
                   ...prev,
                   title,
-                  slug: prev.slug || slugify(title),
+                  slug: slugEdited ? prev.slug : slugify(title),
                 }));
               }}
               required
@@ -228,7 +231,12 @@ export function ProblemsPanel() {
             <input
               className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs"
               value={form.slug}
-              onChange={(e) => setForm((prev) => ({ ...prev, slug: e.target.value }))}
+              onChange={(e) => {
+                const slug = e.target.value;
+                // Clearing the field hands the slug back to the title.
+                setSlugEdited(slug !== "");
+                setForm((prev) => ({ ...prev, slug }));
+              }}
               required
             />
           </label>

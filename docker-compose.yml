@@ -149,6 +149,9 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       INTERNAL_API_URL: http://backend:8000
       JWT_COOKIE_SECURE: "false"
+      # Docker Desktop on Windows/macOS does not forward file-change events
+      # into bind mounts, so without polling edits never hot-reload.
+      WATCHPACK_POLLING: "true"
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules

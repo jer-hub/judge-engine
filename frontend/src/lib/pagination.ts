@@ -1,3 +1,9 @@
+import { apiFetch } from "@/lib/api";
+import type { Paginated } from "@/lib/types";
+
+/** The backend's max_page_size (config/pagination.py). */
+const MAX_PAGE_SIZE = 100;
+
 export type ListQueryParams = Record<
   string,
   string | number | boolean | null | undefined
@@ -15,6 +21,25 @@ export function buildListQuery(
   const qs = search.toString();
   const path = basePath.endsWith("/") ? basePath : `${basePath}/`;
   return qs ? `${path}?${qs}` : path;
+}
+
+/**
+ * Every page of a list endpoint merged into one result, for pickers and
+ * validation that must see all rows (a school can have 100+ students).
+ */
+export async function fetchAllPages<T>(
+  basePath: string,
+  params: ListQueryParams = {},
+): Promise<Paginated<T>> {
+  const results: T[] = [];
+  for (let page = 1; ; page++) {
+    const data = await apiFetch<Paginated<T>>(
+      buildListQuery(basePath, { ...params, page_size: MAX_PAGE_SIZE, page }),
+    );
+    results.push(...data.results);
+    // `next` is an absolute backend URL, so only use it as a "more" flag.
+    if (!data.next) return { count: data.count, next: null, previous: null, results };
+  }
 }
 
 export function pageRange(

@@ -19,11 +19,20 @@ export default function ScoreboardPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["scoreboard", id],
     queryFn: () => apiFetch<Scoreboard>(`/contests/${id}/scoreboard/`),
-    refetchInterval: 3000,
+    // After the contest, keep polling only until the last verdicts land.
+    refetchInterval: (query) => {
+      const board = query.state.data;
+      const settled =
+        board?.status === "past" &&
+        board.standings.every((row) => row.problems.every((cell) => !cell.pending));
+      return settled ? false : 3000;
+    },
   });
 
   if (isLoading) return <p className="text-slate-400">Loading scoreboard…</p>;
-  if (error || !data) {
+  // Only a failed first load replaces the table; a failed refresh keeps the
+  // last standings on screen (it may be projected for the whole class).
+  if (!data) {
     return <p className="text-red-300">{(error as Error)?.message || "Error"}</p>;
   }
 
@@ -32,7 +41,13 @@ export default function ScoreboardPage() {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-semibold text-white">{data.title}</h1>
-          <p className="text-sm text-slate-400">ICPC-style scoreboard · auto-refresh 3s</p>
+          <p className="text-sm text-slate-400">
+            ICPC-style scoreboard ·{" "}
+            {data.status === "past" ? "final standings" : "auto-refresh 3s"}
+          </p>
+          {error && (
+            <p className="text-sm text-amber-300">Connection lost — showing the last standings, retrying…</p>
+          )}
         </div>
         {data.is_frozen && (
           <span className="rounded bg-amber-900/50 px-3 py-1 text-sm text-amber-200">

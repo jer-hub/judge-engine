@@ -5,12 +5,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { formatApiErrorPayload } from "@/lib/admin";
 import { ApiError, apiFetch } from "@/lib/api";
-import type {
-  AdminUser,
-  ContestDetail,
-  Paginated,
-  ProblemListItem,
-} from "@/lib/types";
+import { fetchAllPages } from "@/lib/pagination";
+import type { AdminUser, ContestDetail, ProblemListItem } from "@/lib/types";
 
 type Props = {
   contestId: number;
@@ -92,13 +88,12 @@ export function ContestEditor({ contestId, onClose }: Props) {
 
   const catalog = useQuery({
     queryKey: ["admin", "problems", "catalog"],
-    queryFn: () =>
-      apiFetch<Paginated<ProblemListItem>>("/problems/?page_size=100"),
+    queryFn: () => fetchAllPages<ProblemListItem>("/problems/"),
   });
 
   const roster = useQuery({
     queryKey: ["admin", "users", "roster-picker"],
-    queryFn: () => apiFetch<Paginated<AdminUser>>("/users/?page_size=100"),
+    queryFn: () => fetchAllPages<AdminUser>("/users/"),
   });
 
   function markDirty() {
