@@ -14,7 +14,7 @@ School competitive programming platform: students write **Java** in the browser,
 ## Stack
 
 ```
-Next.js 14  →  Django REST (JWT)  →  Redis / Celery  →  Docker Temurin 17 sandbox
+Next.js 15  →  Django REST (JWT)  →  Redis / Celery  →  Docker Temurin 17 sandbox
                       ↕
                  PostgreSQL
 ```

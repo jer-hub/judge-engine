@@ -51,7 +51,7 @@ Judge Engine is a **school-based competitive programming platform** where studen
 
 ### Frontend (`./frontend`)
 
-**Framework:** Next.js 14 (App Router)
+**Framework:** Next.js 15 (App Router), React 19
 
 **Key Pages:**
 - `/` — Homepage / login redirect

@@ -31,7 +31,14 @@ export async function apiFetch<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const res = await fetch(`/api/proxy${path}`, {
+  // Next 308-redirects "/api/proxy/x/" to "/api/proxy/x" (a wasted round
+  // trip per call); the proxy adds the slash back for Django.
+  const q = path.indexOf("?");
+  const pathname = q === -1 ? path : path.slice(0, q);
+  const query = q === -1 ? "" : path.slice(q);
+  const proxyPath = pathname.replace(/\/+$/, "") + query;
+
+  const res = await fetch(`/api/proxy${proxyPath}`, {
     ...options,
     headers,
     credentials: "include",
