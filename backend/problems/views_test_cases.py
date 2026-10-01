@@ -46,6 +46,15 @@ class TestCaseViewSet(viewsets.ModelViewSet):
                 {"detail": "Each item requires an id."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        for item in items:
+            order = item.get("order")
+            if order is not None and (
+                isinstance(order, bool) or not str(order).lstrip("-").isdigit()
+            ):
+                return Response(
+                    {"detail": "Each order must be an integer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         with transaction.atomic():
             cases = {tc.id: tc for tc in TestCase.objects.filter(id__in=ids)}
             if len(cases) != len(set(ids)):

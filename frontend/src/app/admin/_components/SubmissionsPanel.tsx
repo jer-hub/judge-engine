@@ -9,7 +9,7 @@ import type { Paginated, Submission } from "@/lib/types";
 
 export function SubmissionsPanel() {
   const { data, isLoading, error } = useQuery({
-    queryKey: ["admin", "submissions"],
+    queryKey: ["admin", "submissions", { page_size: "default" }],
     queryFn: () => apiFetch<Paginated<Submission>>("/submissions/"),
     refetchInterval: 8000,
   });

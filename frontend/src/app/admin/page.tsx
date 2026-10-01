@@ -68,7 +68,7 @@ export default function AdminPage() {
   });
 
   const submissions = useQuery({
-    queryKey: ["admin", "submissions"],
+    queryKey: ["admin", "submissions", { page_size: 20 }],
     queryFn: () => apiFetch<Paginated<Submission>>("/submissions/?page_size=20"),
     enabled: !!me.data?.is_platform_admin,
   });

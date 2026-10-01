@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Countdown } from "@/components/Countdown";
@@ -24,6 +25,10 @@ export default function ContestDetailPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["contest", id] }),
   });
 
+  const refetchContest = useCallback(() => {
+    void qc.invalidateQueries({ queryKey: ["contest", id] });
+  }, [qc, id]);
+
   if (isLoading) return <p className="text-slate-400">Loading…</p>;
   if (error || !data) {
     return <p className="text-red-300">{(error as Error)?.message || "Not found"}</p>;
@@ -42,6 +47,8 @@ export default function ContestDetailPage() {
           startTime={data.start_time}
           endTime={data.end_time}
           serverTime={data.server_time}
+          // Start reveals the problems and enables links; end disables them.
+          onPhaseChange={refetchContest}
         />
       </div>
 
@@ -79,6 +86,13 @@ export default function ContestDetailPage() {
             </tr>
           </thead>
           <tbody>
+            {data.problems.length === 0 && data.status === "upcoming" && (
+              <tr className="border-t border-slate-800">
+                <td colSpan={3} className="px-4 py-6 text-center text-slate-400">
+                  Problems are revealed when the contest starts.
+                </td>
+              </tr>
+            )}
             {data.problems.map((cp) => (
               <tr key={cp.id} className="border-t border-slate-800">
                 <td className="px-4 py-3 font-mono text-emerald-300">{cp.letter}</td>

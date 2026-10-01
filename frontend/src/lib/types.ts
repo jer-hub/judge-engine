@@ -85,6 +85,8 @@ export type ContestDetail = ContestListItem & {
     points: number;
     problem: ProblemListItem;
   }>;
+  /** Students get only a count; admins get the full list below. */
+  participant_count?: number;
   participants?: Array<{
     id: number;
     user_id: number;
