@@ -105,6 +105,16 @@ class ContestDetailSerializer(serializers.ModelSerializer):
     def get_server_time(self, obj: Contest) -> str:
         return timezone.now().isoformat()
 
+    def to_representation(self, instance: Contest):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        is_admin = bool(request and getattr(request.user, "is_platform_admin", False))
+        # The problem set (titles, tags, limits) is part of the contest secret
+        # until it starts; statements are already gated in contests/access.py.
+        if not is_admin and instance.status == "upcoming":
+            data["problems"] = []
+        return data
+
 
 def sync_contest_problems(contest: Contest, items: list[dict]) -> None:
     """Replace contest problem set; omit deletes letters not in payload."""

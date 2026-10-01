@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.db.models import Count
 from rest_framework import serializers
 
@@ -14,6 +15,10 @@ class SampleTestCaseSerializer(serializers.ModelSerializer):
 
 
 class TestCaseWriteSerializer(serializers.ModelSerializer):
+    # ModelSerializer makes the auto PK read-only and drops it, which made every
+    # nested edit recreate all cases (cascading away SubmissionResult history).
+    id = serializers.IntegerField(required=False)
+
     class Meta:
         model = TestCase
         fields = (
@@ -157,6 +162,7 @@ class ProblemWriteSerializer(serializers.ModelSerializer):
             )
         return attrs
 
+    @transaction.atomic
     def create(self, validated_data):
         test_cases_data = validated_data.pop("test_cases", [])
         request = self.context.get("request")
@@ -164,9 +170,11 @@ class ProblemWriteSerializer(serializers.ModelSerializer):
             validated_data["created_by"] = request.user
         problem = Problem.objects.create(**validated_data)
         for tc in test_cases_data:
+            tc.pop("id", None)  # a new problem has no existing cases to match
             TestCase.objects.create(problem=problem, **tc)
         return problem
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         test_cases_data = validated_data.pop("test_cases", None)
         for attr, value in validated_data.items():

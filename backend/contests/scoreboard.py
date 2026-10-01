@@ -36,7 +36,15 @@ def build_scoreboard(contest: Contest, viewer=None) -> dict[str, Any]:
         except Exception:
             pass
 
-    payload = _compute_scoreboard(contest, viewer=viewer, reveal_frozen=is_admin)
+    # Students all get the same freeze-respecting board (it is cached under one
+    # shared key), so no viewer's own post-freeze results are revealed here;
+    # they still see their own verdicts on the submissions page.
+    payload = _compute_scoreboard(contest, reveal_frozen=is_admin)
+    if not is_admin and contest.status == "upcoming":
+        # Don't reveal the problem set before the start.
+        payload["problems"] = []
+        for row in payload["standings"]:
+            row["problems"] = []
 
     if not is_admin:
         try:
@@ -59,7 +67,6 @@ def invalidate_scoreboard_cache(contest_id: int) -> None:
 
 def _compute_scoreboard(
     contest: Contest,
-    viewer=None,
     reveal_frozen: bool = False,
 ) -> dict[str, Any]:
     problems = list(
@@ -107,7 +114,6 @@ def _compute_scoreboard(
             apply_freeze
             and freeze_at is not None
             and sub.submitted_at >= freeze_at
-            and (viewer is None or sub.user_id != viewer.id)
         )
 
         if hidden_by_freeze:

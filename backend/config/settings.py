@@ -161,12 +161,19 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ],
+    # Requests arrive via the Next.js proxy, which forwards the client IP as the
+    # last X-Forwarded-For entry; trust exactly that one hop. Without it every
+    # anon throttle (login included) is one bucket for the whole school.
+    "NUM_PROXIES": env.int("DRF_NUM_PROXIES", default=1),
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/min",
         "user": "120/min",
         "submissions": env("SUBMISSION_THROTTLE_RATE"),
         "runs": "20/min",
-        "login": "5/min",
+        # Per IP: generous, since a lab behind NAT can share one address.
+        "login": env("LOGIN_IP_THROTTLE_RATE", default="30/min"),
+        # Per username: the real brute-force cap.
+        "login-user": env("LOGIN_USER_THROTTLE_RATE", default="5/min"),
         "logout": "10/min",
         "user-import": "6/min",
     },

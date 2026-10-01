@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { djangoAdminUrl } from "@/lib/admin";
 import { apiFetch } from "@/lib/api";
+import { clearAllDrafts } from "@/lib/drafts";
 import type { User } from "@/lib/types";
 
 const links = [
@@ -17,6 +18,7 @@ const links = [
 export function NavBar() {
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { data: user } = useQuery({
     queryKey: ["me"],
     queryFn: () => apiFetch<User>("/auth/me/"),
@@ -25,6 +27,9 @@ export function NavBar() {
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
+    // Shared lab PCs: leave nothing of this user for the next one.
+    clearAllDrafts();
+    queryClient.clear();
     router.push("/login");
     router.refresh();
   }

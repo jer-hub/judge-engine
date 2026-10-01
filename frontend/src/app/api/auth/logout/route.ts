@@ -1,15 +1,13 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import {
-  accessCookieName,
   backendBase,
-  refreshCookieName,
+  clearAuthCookies,
+  getRefreshToken,
 } from "@/lib/auth-cookies";
 
 export async function POST() {
-  const jar = await cookies();
-  const refresh = jar.get(refreshCookieName())?.value;
+  const refresh = await getRefreshToken();
 
   if (refresh) {
     try {
@@ -24,15 +22,6 @@ export async function POST() {
   }
 
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(accessCookieName(), "", {
-    httpOnly: true,
-    path: "/",
-    maxAge: 0,
-  });
-  response.cookies.set(refreshCookieName(), "", {
-    httpOnly: true,
-    path: "/",
-    maxAge: 0,
-  });
+  clearAuthCookies(response);
   return response;
 }

@@ -8,7 +8,8 @@ import { CodeEditor, JAVA_STUB } from "@/components/CodeEditor";
 import { StatementContent } from "@/components/StatementContent";
 import { SubmissionStatus, VerdictBadge } from "@/components/SubmissionStatus";
 import { ApiError, apiFetch } from "@/lib/api";
-import type { ProblemDetail, RunPreview, Submission } from "@/lib/types";
+import { draftKey, loadDraft, saveDraft } from "@/lib/drafts";
+import type { ProblemDetail, RunPreview, Submission, User } from "@/lib/types";
 
 const RUN_POLL_INTERVAL_MS = 700;
 const RUN_POLL_TIMEOUT_MS = 90_000;
@@ -30,16 +31,25 @@ function ProblemDetailInner() {
     queryFn: () => apiFetch<ProblemDetail>(`/problems/${slug}/`),
   });
 
-  useEffect(() => {
-    const key = `draft:${slug}`;
-    const saved = localStorage.getItem(key);
-    if (saved) setCode(saved);
-  }, [slug]);
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => apiFetch<User>("/auth/me/"),
+    retry: false,
+  });
+  const storageKey = me && slug ? draftKey(me.id, contestId, slug) : null;
+  // Only save once this key's draft is loaded, so the stub never overwrites it.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!slug) return;
-    localStorage.setItem(`draft:${slug}`, code);
-  }, [code, slug]);
+    if (!storageKey) return;
+    setCode(loadDraft(storageKey) ?? JAVA_STUB);
+    setLoadedKey(storageKey);
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageKey || loadedKey !== storageKey) return;
+    saveDraft(storageKey, code);
+  }, [code, storageKey, loadedKey]);
 
   useEffect(() => {
     if (!problem || stdinReady) return;
