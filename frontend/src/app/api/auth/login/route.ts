@@ -6,8 +6,12 @@ import {
   forwardedHeaders,
   setAuthCookies,
 } from "@/lib/auth-cookies";
+import { rejectCrossOrigin } from "@/lib/same-origin";
 
 export async function POST(req: NextRequest) {
+  // Login CSRF: don't let another site sign a student into an attacker's account.
+  const refused = rejectCrossOrigin(req);
+  if (refused) return refused;
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") {
     return NextResponse.json({ detail: "Invalid request." }, { status: 400 });

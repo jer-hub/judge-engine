@@ -1,12 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import {
   backendBase,
   clearAuthCookies,
   getRefreshToken,
 } from "@/lib/auth-cookies";
+import { rejectCrossOrigin } from "@/lib/same-origin";
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const refused = rejectCrossOrigin(req);
+  if (refused) return refused;
   const refresh = await getRefreshToken();
 
   if (refresh) {

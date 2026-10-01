@@ -11,6 +11,7 @@ import {
   setAuthCookies,
   type RefreshResult,
 } from "@/lib/auth-cookies";
+import { rejectCrossOrigin } from "@/lib/same-origin";
 
 export async function GET(
   req: NextRequest,
@@ -48,6 +49,9 @@ export async function DELETE(
 }
 
 async function proxy(req: NextRequest, pathParts: string[]) {
+  const refused = rejectCrossOrigin(req);
+  if (refused) return refused;
+
   // Django APPEND_SLASH cannot redirect POST while keeping the body — always use a trailing slash.
   let path = pathParts.join("/");
   if (path && !path.endsWith("/")) {

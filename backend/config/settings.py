@@ -204,6 +204,10 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env("JWT_REFRESH_DAYS")),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
+    # Tokens carry a hash of the password; changing it rejects every token
+    # issued before, so an admin reset ends an attacker's session at once.
+    "CHECK_REVOKE_TOKEN": True,
+    "REVOKE_TOKEN_CLAIM": "hash_password",
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
@@ -219,6 +223,8 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_ROUTES = {
     "judge.tasks.judge_submission": {"queue": "judge"},
     "judge.tasks.preview_run": {"queue": "preview"},
+    # Minutes of password hashing; keep it off the graded-judging queue.
+    "accounts.tasks.import_users_task": {"queue": "preview"},
 }
 
 # Judge configuration

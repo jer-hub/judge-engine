@@ -11,6 +11,14 @@ const SAMPLE_HEADER =
   "username,password,first_name,last_name,email,school_id,class_section";
 
 const MAX_CHARS = 100_000;
+const IMPORT_POLL_INTERVAL_MS = 1500;
+const IMPORT_POLL_TIMEOUT_MS = 10 * 60_000;
+
+type ImportJob = {
+  task_id: string;
+  status: "Pending" | "Running" | "Done" | "Failed";
+  detail?: string;
+};
 
 type Props = {
   onImported: () => void;
@@ -23,11 +31,26 @@ export function AccountsImport({ onImported }: Props) {
   const [result, setResult] = useState<UserImportResult | null>(null);
 
   const importMutation = useMutation({
-    mutationFn: (dryRun: boolean) =>
-      apiFetch<UserImportResult>("/users/import/", {
+    mutationFn: async (dryRun: boolean) => {
+      const first = await apiFetch<UserImportResult | ImportJob>("/users/import/", {
         method: "POST",
         body: JSON.stringify({ csv_text: csvText, dry_run: dryRun }),
-      }),
+      });
+      if (!("task_id" in first)) return first; // dry run answers inline
+      // Real imports hash every password server-side and run in the background.
+      const deadline = Date.now() + IMPORT_POLL_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, IMPORT_POLL_INTERVAL_MS));
+        const job = await apiFetch<UserImportResult & ImportJob>(
+          `/users/import/${first.task_id}/`,
+        );
+        if (job.status === "Done") return job;
+        if (job.status === "Failed") throw new Error(job.detail || "Import failed.");
+      }
+      throw new Error(
+        "Import is still running. Refresh the account list in a minute to see the new accounts.",
+      );
+    },
     onSuccess: (data, dryRun) => {
       setError(null);
       setResult(data);
