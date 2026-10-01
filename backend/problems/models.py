@@ -10,6 +10,7 @@ from .constants import (
     MIN_MEMORY_LIMIT_MB,
     MIN_TIME_LIMIT_MS,
 )
+from .sanitize import sanitize_statement
 from .tags import normalize_tags
 
 
@@ -64,6 +65,8 @@ class Problem(models.Model):
         ordering = ["title"]
 
     def save(self, *args, **kwargs):
+        # Every write path (API, Django admin, seeds) stores a cleaned copy.
+        self.statement = sanitize_statement(self.statement)
         if not self.slug:
             base = slugify(self.title) or "problem"
             slug = base

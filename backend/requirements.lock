@@ -1,0 +1,44 @@
+# Exact versions verified with the test suite. Install with:
+#   pip install -r requirements.txt -c requirements.lock
+# Regenerate after changing requirements.txt: pip freeze > requirements.lock
+# (inside the backend image), then re-run the tests.
+amqp==5.4.0
+asgiref==3.12.1
+billiard==4.3.0
+bleach==6.4.0
+celery==5.6.3
+certifi==2026.7.22
+charset-normalizer==3.5.1
+click==8.5.0
+click-didyoumean==0.3.1
+click-plugins==1.1.1.2
+click-repl==0.4.0
+Django==5.2.17
+django-cors-headers==4.9.0
+django-environ==0.14.0
+djangorestframework==3.18.1
+djangorestframework_simplejwt==5.5.1
+docker==7.2.0
+gunicorn==23.0.0
+idna==3.20
+kombu==5.6.2
+Markdown==3.10.3
+packaging==26.3
+pillow==11.3.0
+prompt_toolkit==3.0.53
+psycopg==3.3.6
+psycopg-binary==3.3.6
+PyJWT==2.14.0
+python-dateutil==2.9.0.post0
+redis==5.3.1
+requests==2.34.2
+six==1.17.0
+sqlparse==0.6.0
+typing_extensions==4.16.0
+tzdata==2026.4
+tzlocal==5.4.4
+urllib3==2.8.0
+vine==5.1.0
+wcwidth==0.8.4
+webencodings==0.6.1
+whitenoise==6.12.0

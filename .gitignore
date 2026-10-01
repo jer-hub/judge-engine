@@ -41,3 +41,6 @@ judge_data/
 # Cursor / local agent configuration
 # (local agent stores, skills, and project-specific automation)
 .cursor/
+
+# Database dumps (docker-compose.prod.yml db-backup) — contain user data
+backups/
