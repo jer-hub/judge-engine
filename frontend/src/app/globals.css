@@ -25,56 +25,106 @@ body {
   font-family: var(--font-mono), ui-monospace, monospace;
 }
 
-prose-invert pre {
-  background: #0f172a;
-}
-
-/* Quill (react-quill) dark theme */
-.rich-text-editor .ql-toolbar.ql-snow {
-  border: none;
-  border-bottom: 1px solid #1e293b;
-  background: rgba(2, 6, 23, 0.8);
-}
-
-.rich-text-editor .ql-container.ql-snow {
-  border: none;
-  font-size: 0.875rem;
+/* Statement typography, shared by the Tiptap editor (.rte-content) and the
+   student view (.statement-content) so they match. Tailwind's preflight strips
+   list/heading styles and the typography plugin (prose) isn't installed. */
+.statement-content {
+  line-height: 1.6;
   color: #e2e8f0;
 }
 
-.rich-text-editor .ql-editor {
+.statement-content h1 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.statement-content p code,
+.statement-content li code {
+  background: #0f172a;
+  border-radius: 0.25rem;
+  padding: 0.1em 0.3em;
+}
+
+.rich-text-editor .rte-content {
   min-height: var(--rte-min-height, 220px);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: #e2e8f0;
+  outline: none;
 }
 
-.rich-text-editor .ql-editor.ql-blank::before {
-  color: #64748b;
-  font-style: normal;
+.rich-text-editor .rte-content:focus-visible {
+  box-shadow: inset 0 0 0 1px #34d39966;
 }
 
-.rich-text-editor .ql-snow .ql-stroke {
-  stroke: #94a3b8;
+.rich-text-editor .rte-content > * + *,
+.statement-content > * + * {
+  margin-top: 0.6em;
 }
 
-.rich-text-editor .ql-snow .ql-fill {
-  fill: #94a3b8;
+.rich-text-editor .rte-content h2,
+.statement-content h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #fff;
 }
 
-.rich-text-editor .ql-snow .ql-picker {
+.rich-text-editor .rte-content h3,
+.statement-content h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.rich-text-editor .rte-content ul,
+.statement-content ul {
+  list-style: disc;
+  padding-left: 1.5rem;
+}
+
+.rich-text-editor .rte-content ol,
+.statement-content ol {
+  list-style: decimal;
+  padding-left: 1.5rem;
+}
+
+.rich-text-editor .rte-content blockquote,
+.statement-content blockquote {
+  border-left: 3px solid #334155;
+  padding-left: 0.75rem;
   color: #94a3b8;
 }
 
-.rich-text-editor .ql-snow .ql-picker-options {
+.rich-text-editor .rte-content pre,
+.statement-content pre {
   background: #0f172a;
-  border-color: #334155;
+  border: 1px solid #1e293b;
+  border-radius: 0.375rem;
+  padding: 0.6rem 0.75rem;
+  font-family: var(--font-geist-mono, ui-monospace, monospace);
+  font-size: 0.8rem;
+  white-space: pre-wrap;
 }
 
-.rich-text-editor .ql-snow a {
+.rich-text-editor .rte-content code,
+.statement-content code {
+  font-family: var(--font-geist-mono, ui-monospace, monospace);
+}
+
+.rich-text-editor .rte-content a,
+.statement-content a {
   color: #34d399;
+  text-decoration: underline;
 }
 
-.rich-text-editor .ql-editor pre.ql-syntax {
-  background: #0f172a;
-  color: #e2e8f0;
+.rich-text-editor .rte-content p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #64748b;
+  float: left;
+  height: 0;
+  pointer-events: none;
 }
 
 

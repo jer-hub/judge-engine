@@ -20,7 +20,9 @@ ALLOWED_TAGS = frozenset(
 )
 ALLOWED_ATTRIBUTES = {
     "a": ["href", "title", "target", "rel"],
-    # Quill encodes indentation, alignment and code highlighting as classes.
+    # Tiptap writes start="3" for a numbered list that doesn't begin at 1.
+    "ol": ["start"],
+    # Older Quill statements encode indentation and code blocks as classes.
     "*": ["class"],
 }
 ALLOWED_PROTOCOLS = frozenset({"http", "https", "mailto"})

@@ -31,18 +31,18 @@ export function StatementContent({ content, className = "" }: Props) {
 
   if (looksLikeHtml(content)) {
     if (safeHtml === null) {
-      return <div className={`prose prose-invert max-w-none text-sm ${className}`} />;
+      return <div className={`statement-content max-w-none text-sm ${className}`} />;
     }
     return (
       <div
-        className={`prose prose-invert max-w-none text-sm ${className}`}
+        className={`statement-content max-w-none text-sm ${className}`}
         dangerouslySetInnerHTML={{ __html: safeHtml }}
       />
     );
   }
 
   return (
-    <div className={`prose prose-invert max-w-none text-sm ${className}`}>
+    <div className={`statement-content max-w-none text-sm ${className}`}>
       <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{content}</ReactMarkdown>
     </div>
   );
