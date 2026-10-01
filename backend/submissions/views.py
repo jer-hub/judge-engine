@@ -75,6 +75,16 @@ class SubmissionViewSet(
     @action(detail=True, methods=["post"], url_path="rejudge")
     def rejudge(self, request, pk=None):
         submission = self.get_object()
+        in_flight = submission.status in (
+            Submission.Status.PENDING,
+            Submission.Status.JUDGING,
+        )
+        # ?force=true recovers a submission stuck after a worker crash.
+        if in_flight and request.query_params.get("force") != "true":
+            return Response(
+                {"detail": "Submission is already queued or being judged."},
+                status=status.HTTP_409_CONFLICT,
+            )
         submission.status = Submission.Status.PENDING
         submission.compile_error = ""
         submission.judged_at = None

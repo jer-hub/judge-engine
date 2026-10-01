@@ -158,6 +158,7 @@ export type Paginated<T> = {
 };
 
 export type RunPreview = {
+  task_id: string;
   status: string;
   compile_error: string;
   stdout: string;

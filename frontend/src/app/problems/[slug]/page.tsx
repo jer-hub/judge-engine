@@ -10,6 +10,10 @@ import { SubmissionStatus, VerdictBadge } from "@/components/SubmissionStatus";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { ProblemDetail, RunPreview, Submission } from "@/lib/types";
 
+const RUN_POLL_INTERVAL_MS = 700;
+const RUN_POLL_TIMEOUT_MS = 90_000;
+const RUN_PENDING = ["Pending", "Running"];
+
 function ProblemDetailInner() {
   const params = useParams<{ slug: string }>();
   const search = useSearchParams();
@@ -59,8 +63,8 @@ function ProblemDetailInner() {
   });
 
   const run = useMutation({
-    mutationFn: () =>
-      apiFetch<RunPreview>("/runs/", {
+    mutationFn: async () => {
+      const queued = await apiFetch<RunPreview>("/runs/", {
         method: "POST",
         body: JSON.stringify({
           problem: problem!.id,
@@ -68,7 +72,23 @@ function ProblemDetailInner() {
           language: "java",
           stdin,
         }),
-      }),
+      });
+      // The judge runs asynchronously; poll until it reports a final status.
+      const deadline = Date.now() + RUN_POLL_TIMEOUT_MS;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, RUN_POLL_INTERVAL_MS));
+        const res = await apiFetch<RunPreview>(`/runs/${queued.task_id}/`);
+        if (!RUN_PENDING.includes(res.status)) return res;
+      }
+      return {
+        task_id: queued.task_id,
+        status: "TimeLimitExceeded",
+        compile_error: "",
+        stdout: "",
+        stderr: "Preview timed out waiting for the judge worker.",
+        execution_time_ms: null,
+      } satisfies RunPreview;
+    },
     onSuccess: (data) => setRunResult(data),
   });
 

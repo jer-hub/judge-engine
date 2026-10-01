@@ -22,14 +22,17 @@ def judge_submission(self, submission_id: int) -> dict:
         logger.error("Submission %s not found", submission_id)
         return {"error": "not_found"}
 
-    if submission.status not in (
-        Submission.Status.PENDING,
-        Submission.Status.JUDGING,
-    ):
+    # Claim atomically so a duplicate enqueue (double rejudge, redelivery)
+    # cannot judge the same submission twice. A retry resumes its own claim.
+    claimable = [Submission.Status.PENDING]
+    if self.request.retries:
+        claimable.append(Submission.Status.JUDGING)
+    claimed = Submission.objects.filter(
+        pk=submission_id, status__in=claimable
+    ).update(status=Submission.Status.JUDGING)
+    if not claimed:
         return {"status": submission.status, "skipped": True}
-
     submission.status = Submission.Status.JUDGING
-    submission.save(update_fields=["status"])
 
     problem = submission.problem
     test_cases = [

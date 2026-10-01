@@ -19,6 +19,7 @@ env = environ.Env(
     JUDGE_WALL_TIMEOUT_MULTIPLIER=(int, 3),
     JUDGE_SOURCE_MAX_BYTES=(int, 65536),
     JUDGE_STDIN_MAX_BYTES=(int, 16384),
+    JUDGE_OUTPUT_MAX_BYTES=(int, 4 * 1024 * 1024),
     JUDGE_IMAGE=(str, "eclipse-temurin:17-jdk-jammy"),
     JUDGE_CONCURRENCY=(int, 4),
     SUBMISSION_THROTTLE_RATE=(str, "12/min"),
@@ -186,6 +187,12 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+# Previews get their own queue/worker so practice runs never delay graded
+# submissions. The judge worker also drains the legacy default queue.
+CELERY_TASK_ROUTES = {
+    "judge.tasks.judge_submission": {"queue": "judge"},
+    "judge.tasks.preview_run": {"queue": "preview"},
+}
 
 # Judge configuration
 JUDGE_DEFAULT_TIME_LIMIT_MS = env("JUDGE_DEFAULT_TIME_LIMIT_MS")
@@ -194,6 +201,8 @@ JUDGE_COMPILE_TIMEOUT_S = env("JUDGE_COMPILE_TIMEOUT_S")
 JUDGE_WALL_TIMEOUT_MULTIPLIER = env("JUDGE_WALL_TIMEOUT_MULTIPLIER")
 JUDGE_SOURCE_MAX_BYTES = env("JUDGE_SOURCE_MAX_BYTES")
 JUDGE_STDIN_MAX_BYTES = env("JUDGE_STDIN_MAX_BYTES")
+# Combined stdout+stderr cap per run; beyond it the container is killed.
+JUDGE_OUTPUT_MAX_BYTES = env("JUDGE_OUTPUT_MAX_BYTES")
 JUDGE_IMAGE = env("JUDGE_IMAGE")
 JUDGE_CONCURRENCY = env("JUDGE_CONCURRENCY")
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")

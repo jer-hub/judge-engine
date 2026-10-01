@@ -1,15 +1,42 @@
 # Production-oriented overrides (use with: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d)
+# Requires Docker Compose >= 2.24 for the !reset / !override tags, which drop
+# dev-only ports and source bind-mounts instead of merging with them.
 services:
+  db:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
   backend:
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py collectstatic --noinput &&
              gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
     restart: unless-stopped
+    environment:
+      DJANGO_DEBUG: "False"
+    # Run the code baked into the image, not the host checkout.
+    volumes: !override
+      - media_data:/app/media
 
   worker:
     restart: unless-stopped
-    command: celery -A config worker --loglevel=info --concurrency=${JUDGE_CONCURRENCY:-4}
+    command: celery -A config worker -Q judge,celery --loglevel=info --concurrency=${JUDGE_CONCURRENCY:-4} -n judge@%h
+    environment:
+      DJANGO_DEBUG: "False"
+    volumes: !override
+      - ./judge_data:/judge_data
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  worker-preview:
+    restart: unless-stopped
+    command: celery -A config worker -Q preview --loglevel=info --concurrency=${JUDGE_PREVIEW_CONCURRENCY:-2} -n preview@%h
+    environment:
+      DJANGO_DEBUG: "False"
+    volumes: !override
+      - ./judge_data:/judge_data
+      - /var/run/docker.sock:/var/run/docker.sock
 
   frontend:
     command: npm run start -- --hostname 0.0.0.0 --port 3000
