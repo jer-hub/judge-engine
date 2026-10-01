@@ -13,39 +13,42 @@ import {
 } from "@/lib/auth-cookies";
 import { rejectCrossOrigin } from "@/lib/same-origin";
 
+// Next 15: dynamic route params arrive as a Promise.
+type RouteContext = { params: Promise<{ path: string[] }> };
+
 export async function GET(
   req: NextRequest,
-  context: { params: { path: string[] } },
+  context: RouteContext,
 ) {
-  return proxy(req, context.params.path);
+  return proxy(req, (await context.params).path);
 }
 
 export async function POST(
   req: NextRequest,
-  context: { params: { path: string[] } },
+  context: RouteContext,
 ) {
-  return proxy(req, context.params.path);
+  return proxy(req, (await context.params).path);
 }
 
 export async function PUT(
   req: NextRequest,
-  context: { params: { path: string[] } },
+  context: RouteContext,
 ) {
-  return proxy(req, context.params.path);
+  return proxy(req, (await context.params).path);
 }
 
 export async function PATCH(
   req: NextRequest,
-  context: { params: { path: string[] } },
+  context: RouteContext,
 ) {
-  return proxy(req, context.params.path);
+  return proxy(req, (await context.params).path);
 }
 
 export async function DELETE(
   req: NextRequest,
-  context: { params: { path: string[] } },
+  context: RouteContext,
 ) {
-  return proxy(req, context.params.path);
+  return proxy(req, (await context.params).path);
 }
 
 async function proxy(req: NextRequest, pathParts: string[]) {
