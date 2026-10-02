@@ -3,7 +3,13 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { formatApiErrorPayload } from "@/lib/admin";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import {
+  bulkRejudge,
+  describeRejudge,
+  downloadStandingsCsv,
+  formatApiErrorPayload,
+} from "@/lib/admin";
 import { ApiError, apiFetch } from "@/lib/api";
 import { fetchAllPages } from "@/lib/pagination";
 import type { AdminUser, ContestDetail, ProblemListItem } from "@/lib/types";
@@ -80,6 +86,9 @@ export function ContestEditor({ contestId, onClose }: Props) {
   const [pasteBuffer, setPasteBuffer] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [exportSection, setExportSection] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [confirmRejudge, setConfirmRejudge] = useState(false);
 
   const detail = useQuery({
     queryKey: ["admin", "contest", contestId],
@@ -143,6 +152,45 @@ export function ContestEditor({ contestId, onClose }: Props) {
     }
     return map;
   }, [roster.data]);
+
+  // Sections of the saved participants, for the standings export filter.
+  const participantSections = useMemo(() => {
+    const sections = new Set<string>();
+    for (const p of detail.data?.participants ?? []) {
+      const section = rosterUsernames.get(p.username.toLowerCase())?.class_section?.trim();
+      if (section) sections.add(section);
+    }
+    return [...sections].sort((a, b) => a.localeCompare(b));
+  }, [detail.data, rosterUsernames]);
+
+  async function exportStandings() {
+    setExporting(true);
+    setError(null);
+    try {
+      await downloadStandingsCsv(contestId, exportSection || undefined);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const rejudgeMutation = useMutation({
+    mutationFn: () => bulkRejudge({ contest: contestId }),
+    onSuccess: (result) => {
+      setConfirmRejudge(false);
+      setError(null);
+      setSavedMsg(describeRejudge(result));
+      void queryClient.invalidateQueries({ queryKey: ["scoreboard", String(contestId)] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "submissions"] });
+    },
+    onError: (err: Error) => {
+      setConfirmRejudge(false);
+      setError(
+        err instanceof ApiError ? formatApiErrorPayload(err.payload, err.message) : err.message,
+      );
+    },
+  });
 
   const unknownParticipants = useMemo(
     () =>
@@ -327,6 +375,47 @@ export function ContestEditor({ contestId, onClose }: Props) {
           Close
         </button>
       </div>
+
+      <div className="flex flex-wrap items-center gap-2 rounded border border-slate-800 bg-slate-900/40 p-3 text-xs">
+        <span className="text-slate-400">Results</span>
+        <select
+          aria-label="Section to export"
+          className="rounded border border-slate-700 bg-slate-900 px-2 py-1"
+          value={exportSection}
+          onChange={(e) => setExportSection(e.target.value)}
+        >
+          <option value="">All sections</option>
+          {participantSections.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => void exportStandings()}
+          disabled={exporting}
+          className="cursor-pointer rounded border border-slate-700 px-3 py-1 text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
+        >
+          {exporting ? "Exporting…" : "Export standings (CSV)"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirmRejudge(true)}
+          disabled={rejudgeMutation.isPending}
+          className="cursor-pointer rounded border border-slate-700 px-3 py-1 text-amber-300 transition hover:bg-slate-800 disabled:opacity-50"
+        >
+          Rejudge contest
+        </button>
+      </div>
+      <ConfirmDialog
+        open={confirmRejudge}
+        title="Rejudge this contest?"
+        body={`Re-judge every finished submission in “${displayTitle}” against the current test cases. Verdicts and the scoreboard may change.`}
+        confirmLabel="Rejudge"
+        onCancel={() => setConfirmRejudge(false)}
+        onConfirm={() => rejudgeMutation.mutate()}
+      />
 
       {detail.isLoading && <p className="text-xs text-slate-500">Loading…</p>}
       {error && (
