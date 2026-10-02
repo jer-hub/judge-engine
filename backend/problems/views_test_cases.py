@@ -5,12 +5,13 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.permissions import IsAdmin
+from audit.mixins import AuditedViewSetMixin
 
 from .models import TestCase
 from .serializers import TestCaseSerializer
 
 
-class TestCaseViewSet(viewsets.ModelViewSet):
+class TestCaseViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
     """
     Admin-only test case CRUD.
 

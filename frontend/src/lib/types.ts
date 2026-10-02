@@ -104,6 +104,29 @@ export type ContestDetail = ContestListItem & {
   }>;
 };
 
+export type AuditEvent = {
+  id: number;
+  actor_username: string;
+  action: string;
+  target: string;
+  fields: string[];
+  status_code: number;
+  created_at: string;
+};
+
+export type JudgeHealth = {
+  workers: Array<{ name: string; ok: boolean }>;
+  judge_worker_up: boolean;
+  preview_worker_up: boolean;
+  queues: Record<"judge" | "preview" | "celery", number | null>;
+  submissions: {
+    pending: number;
+    judging: number;
+    system_error: number;
+    oldest_pending_seconds: number | null;
+  };
+};
+
 export type Clarification = {
   id: number;
   problem_letter: string | null;

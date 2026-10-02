@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.permissions import IsAdmin
+from audit.mixins import AuditedViewSetMixin
 from contests.access import unpublished_contest_problem_q
 from submissions.models import Submission
 
@@ -19,7 +20,7 @@ from .serializers import (
 )
 
 
-class ProblemViewSet(viewsets.ModelViewSet):
+class ProblemViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
     lookup_field = "slug"
     permission_classes = [IsAuthenticated]
 

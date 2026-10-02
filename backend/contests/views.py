@@ -10,6 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from accounts.permissions import IsAdmin
+from audit.mixins import AuditedViewSetMixin
 
 from .export import standings_csv
 from . import clarifications as clar
@@ -23,7 +24,7 @@ from .serializers import (
 )
 
 
-class ContestViewSet(viewsets.ModelViewSet):
+class ContestViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
