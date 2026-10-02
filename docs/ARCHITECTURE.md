@@ -114,7 +114,7 @@ User (role: admin/student)
 3. Creates isolated Docker container (Temurin 17 JDK)
 4. Compiles Java code (timeout: 30s; a timeout means an overloaded host and becomes SystemError)
 5. Runs against hidden tests (timeout: 2s per test, memory: 256 MB)
-6. Captures verdict: `Accepted`, `CompileError`, `WrongAnswer`, `RuntimeError`, `TimeLimitExceeded`, `MemoryLimitExceeded`, or `SystemError`
+6. Captures verdict: `Accepted`, `CompileError`, `WrongAnswer`, `RuntimeError`, `TimeLimitExceeded`, `MemoryLimitExceeded`, `OutputLimitExceeded`, or `SystemError`
 7. Stores the result, but only if the task still holds the submission's claim (a rejudge revokes it)
 8. Frontend polls for verdict
 
@@ -129,6 +129,7 @@ User (role: admin/student)
 **Verdict Determination:**
 - `Accepted` — all tests passed
 - `WrongAnswer` — output mismatch
+- `OutputLimitExceeded` — printed more than `JUDGE_OUTPUT_MAX_BYTES` (4 MB); the run is killed
 - `CompileError` — `javac` failed (no attempt or penalty in contests)
 - `RuntimeError` — uncaught exception or non-zero exit
 - `TimeLimitExceeded` — CPU time over the problem's limit (includes JVM startup, ~0.4 s; minimum limit 1000 ms). Measured from the container's cgroup, so waiting on a busy host does not count; a wall-clock cap of 3× the limit still kills programs that block

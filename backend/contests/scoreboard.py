@@ -148,6 +148,7 @@ def _compute_scoreboard(
             Submission.Status.TIME_LIMIT_EXCEEDED,
             Submission.Status.MEMORY_LIMIT_EXCEEDED,
             Submission.Status.RUNTIME_ERROR,
+            Submission.Status.OUTPUT_LIMIT_EXCEEDED,
         ):
             cell["attempts"] += 1
         # CompileError: ignored entirely, as in ICPC — no attempt, no penalty.

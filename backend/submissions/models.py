@@ -14,6 +14,7 @@ class Submission(models.Model):
         TIME_LIMIT_EXCEEDED = "TimeLimitExceeded", "Time Limit Exceeded"
         MEMORY_LIMIT_EXCEEDED = "MemoryLimitExceeded", "Memory Limit Exceeded"
         RUNTIME_ERROR = "RuntimeError", "Runtime Error"
+        OUTPUT_LIMIT_EXCEEDED = "OutputLimitExceeded", "Output Limit Exceeded"
         COMPILE_ERROR = "CompileError", "Compile Error"
         # The judge infrastructure failed, not the student's code: no penalty,
         # and the recovery sweep re-judges it automatically.

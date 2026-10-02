@@ -86,7 +86,7 @@ export function SubmissionStatus({ submissionId }: Props) {
                   #{r.test_case_order}
                   {r.is_sample ? " (sample)" : ""}
                 </td>
-                <td>{r.verdict}</td>
+                <td>{verdictLabel(r.verdict)}</td>
                 <td>{r.execution_time_ms != null ? `${r.execution_time_ms} ms` : "—"}</td>
               </tr>
             ))}
@@ -95,6 +95,21 @@ export function SubmissionStatus({ submissionId }: Props) {
       )}
     </div>
   );
+}
+
+const LABELS: Record<string, string> = {
+  WrongAnswer: "Wrong Answer",
+  TimeLimitExceeded: "Time Limit Exceeded",
+  MemoryLimitExceeded: "Memory Limit Exceeded",
+  OutputLimitExceeded: "Output Limit Exceeded",
+  RuntimeError: "Runtime Error",
+  CompileError: "Compile Error",
+  SystemError: "System Error",
+  JudgeBusy: "Judge Busy",
+};
+
+export function verdictLabel(status: string) {
+  return LABELS[status] ?? status;
 }
 
 export function VerdictBadge({ status }: { status: string }) {
@@ -106,7 +121,7 @@ export function VerdictBadge({ status }: { status: string }) {
         : "bg-red-900/60 text-red-200";
   return (
     <span className={`rounded px-2 py-1 text-xs font-semibold ${color}`}>
-      {status === SYSTEM_ERROR ? "System Error" : status}
+      {verdictLabel(status)}
     </span>
   );
 }

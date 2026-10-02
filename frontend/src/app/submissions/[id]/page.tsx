@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { VerdictBadge } from "@/components/SubmissionStatus";
+import { VerdictBadge, verdictLabel } from "@/components/SubmissionStatus";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { Submission, User } from "@/lib/types";
 
@@ -152,7 +152,7 @@ export default function SubmissionDetailPage() {
                       #{r.test_case_order}
                       {r.is_sample ? " (sample)" : ""}
                     </td>
-                    <td className="px-4 py-2">{r.verdict}</td>
+                    <td className="px-4 py-2">{verdictLabel(r.verdict)}</td>
                     <td className="px-4 py-2 text-slate-400">
                       {r.execution_time_ms != null ? `${r.execution_time_ms} ms` : "—"}
                     </td>
