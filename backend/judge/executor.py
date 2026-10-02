@@ -42,11 +42,42 @@ def _is_absolute_host_path(path: str) -> bool:
     return path.startswith("/") or re.match(r"^[A-Za-z]:[\\/]", path) is not None
 
 
+# Runs the program, then reports the container's CPU time on stderr. Time
+# limits use CPU time: wall-clock time also counts waiting for the CPU or the
+# disk, so a busy host turned correct solutions into TLE. `kill -9 -1` first
+# ends anything the program left running, so the marker is always the last
+# line and the program cannot forge it (we parse only a trailing marker).
+CPU_MARKER = "__JUDGE_CPU_USEC="
+_CPU_WRAPPER = (
+    '"$@"; code=$?\n'
+    "kill -9 -1 2>/dev/null\n"
+    "cpu=$(sed -n 's/^usage_usec //p' /sys/fs/cgroup/cpu.stat 2>/dev/null)\n"
+    f"printf '\\n{CPU_MARKER}%s\\n' \"$cpu\" >&2\n"
+    "exit $code\n"
+)
+_CPU_MARKER_RE = re.compile(r"\n?" + re.escape(CPU_MARKER) + r"(\d*)\n?\Z")
+
+
+def _with_cpu_accounting(command: list[str]) -> list[str]:
+    return ["sh", "-c", _CPU_WRAPPER, "sh", *command]
+
+
+def _split_cpu_marker(stderr: str) -> tuple[str, int | None]:
+    """Strip the wrapper's trailing CPU marker; returns (stderr, cpu_ms)."""
+    match = _CPU_MARKER_RE.search(stderr)
+    if match is None:
+        return stderr, None
+    usec = match.group(1)
+    return stderr[: match.start()], (int(usec) // 1000 if usec else None)
+
+
 def _java_run_command(memory_limit_mb: int) -> list[str]:
     jvm_heap = max(memory_limit_mb - 64, 32)
     # -Xss: recursive DFS on ~1e5 nodes must not overflow the default 1 MB
     # stack. Serial GC: no GC threads competing for the single CPU and pids cap.
-    return ["java", f"-Xmx{jvm_heap}m", "-Xss64m", "-XX:+UseSerialGC", "Solution"]
+    return _with_cpu_accounting(
+        ["java", f"-Xmx{jvm_heap}m", "-Xss64m", "-XX:+UseSerialGC", "Solution"]
+    )
 
 
 def _is_java_oom(run: "RunResult") -> bool:
@@ -169,11 +200,9 @@ class JudgeExecutor:
                 work_writable=True,
             )
             if compile_result.timed_out:
-                return {
-                    "status": "CompileError",
-                    "compile_error": "Compilation timed out.",
-                    "results": [],
-                }
+                # javac on a normal-sized source never takes this long; it
+                # means the host is overloaded, so retry rather than blame.
+                raise SandboxError("Compilation timed out")
             if compile_result.exit_code is None:
                 raise SandboxError("Compiler container exited without a status")
             if compile_result.exit_code not in (0,):
@@ -263,13 +292,9 @@ class JudgeExecutor:
                 work_writable=True,
             )
             if compile_result.timed_out:
-                return {
-                    "status": "CompileError",
-                    "compile_error": "Compilation timed out.",
-                    "stdout": "",
-                    "stderr": "",
-                    "execution_time_ms": None,
-                }
+                # javac on a normal-sized source never takes this long; it
+                # means the host is overloaded, so retry rather than blame.
+                raise SandboxError("Compilation timed out")
             if compile_result.exit_code is None:
                 raise SandboxError("Compiler container exited without a status")
             if compile_result.exit_code not in (0,):
@@ -444,7 +469,10 @@ class JudgeExecutor:
                     timed_out=True,
                 )
 
-            elapsed_ms = _process_runtime_ms(state)
+            stderr, cpu_ms = _split_cpu_marker(stderr)
+            # CPU time when the wrapper reported it; otherwise (compile, or
+            # output cut off before the marker) the process lifetime.
+            elapsed_ms = cpu_ms if cpu_ms is not None else _process_runtime_ms(state)
             if elapsed_ms is None:
                 elapsed_ms = wall_ms
             over_limit = time_limit_ms is not None and elapsed_ms > time_limit_ms

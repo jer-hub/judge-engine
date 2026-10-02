@@ -112,7 +112,7 @@ User (role: admin/student)
 1. Student submits code → API enqueues task to Redis
 2. Celery worker picks up task
 3. Creates isolated Docker container (Temurin 17 JDK)
-4. Compiles Java code (timeout: 10s)
+4. Compiles Java code (timeout: 30s; a timeout means an overloaded host and becomes SystemError)
 5. Runs against hidden tests (timeout: 2s per test, memory: 256 MB)
 6. Captures verdict: `Accepted`, `CompileError`, `WrongAnswer`, `RuntimeError`, `TimeLimitExceeded`, `MemoryLimitExceeded`, or `SystemError`
 7. Stores the result, but only if the task still holds the submission's claim (a rejudge revokes it)
@@ -131,7 +131,7 @@ User (role: admin/student)
 - `WrongAnswer` — output mismatch
 - `CompileError` — `javac` failed (no attempt or penalty in contests)
 - `RuntimeError` — uncaught exception or non-zero exit
-- `TimeLimitExceeded` — process time over the problem's limit (includes JVM startup; minimum limit 1000 ms)
+- `TimeLimitExceeded` — CPU time over the problem's limit (includes JVM startup, ~0.4 s; minimum limit 1000 ms). Measured from the container's cgroup, so waiting on a busy host does not count; a wall-clock cap of 3× the limit still kills programs that block
 - `MemoryLimitExceeded` — container memory limit hit, or Java `OutOfMemoryError`
 - `SystemError` — the judge itself failed (Docker error, task time limit, problem without tests); no penalty, re-judged automatically
 
@@ -214,11 +214,11 @@ Redis: Task sits in queue
     ↓
 Worker: Spawn Docker container with source code
     ↓
-Worker: Compile Java (10s timeout)
+Worker: Compile Java (30s timeout)
     ↓
 Worker: For each hidden test case:
   - Write test input to stdin
-  - Run Java program (2s timeout, 256MB memory limit)
+  - Run Java program (problem time limit in CPU time, memory limit per problem)
   - Capture stdout
   - Compare to expected output
     ↓
