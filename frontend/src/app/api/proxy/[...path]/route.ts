@@ -96,12 +96,15 @@ async function proxy(req: NextRequest, pathParts: string[]) {
     }
   }
 
+  const responseHeaders = new Headers({
+    "Content-Type": upstream.headers.get("Content-Type") || "application/json",
+  });
+  // File downloads (standings CSV) name themselves through this header.
+  const disposition = upstream.headers.get("Content-Disposition");
+  if (disposition) responseHeaders.set("Content-Disposition", disposition);
   const response = new NextResponse(upstream.body, {
     status: upstream.status,
-    headers: {
-      "Content-Type":
-        upstream.headers.get("Content-Type") || "application/json",
-    },
+    headers: responseHeaders,
   });
   if (result?.ok) {
     setAuthCookies(response, result.tokens);

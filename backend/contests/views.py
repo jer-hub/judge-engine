@@ -1,5 +1,7 @@
 from django.db.models import Q
+from django.http import HttpResponse
 from django.utils import timezone
+from django.utils.text import slugify
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -7,6 +9,7 @@ from rest_framework.response import Response
 
 from accounts.permissions import IsAdmin
 
+from .export import standings_csv
 from .models import Contest, ContestParticipant
 from .scoreboard import build_scoreboard
 from .serializers import (
@@ -46,7 +49,7 @@ class ContestViewSet(viewsets.ModelViewSet):
         return ContestListSerializer
 
     def get_permissions(self):
-        if self.action in ("create", "update", "partial_update", "destroy"):
+        if self.action in ("create", "update", "partial_update", "destroy", "standings_export"):
             return [IsAuthenticated(), IsAdmin()]
         return [IsAuthenticated()]
 
@@ -73,3 +76,16 @@ class ContestViewSet(viewsets.ModelViewSet):
         contest = self.get_object()
         data = build_scoreboard(contest, viewer=request.user)
         return Response(data)
+
+    @action(detail=True, methods=["get"], url_path="standings-export")
+    def standings_export(self, request, pk=None):
+        """Admin: final standings as CSV; ?section= keeps one class section."""
+        contest = self.get_object()
+        section = request.query_params.get("section", "").strip() or None
+        body = standings_csv(contest, viewer=request.user, section=section)
+        name = slugify(contest.title) or f"contest-{contest.id}"
+        if section:
+            name += f"-{slugify(section) or 'section'}"
+        response = HttpResponse(body, content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{name}-standings.csv"'
+        return response
