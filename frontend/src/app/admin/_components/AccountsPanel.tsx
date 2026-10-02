@@ -1,19 +1,31 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { EmptyState } from "@/components/EmptyState";
+import { Pagination } from "@/components/Pagination";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { formatApiErrorPayload } from "@/lib/admin";
 import { ApiError, apiFetch } from "@/lib/api";
+import { buildListQuery } from "@/lib/pagination";
 import type { AdminUser, Paginated } from "@/lib/types";
 
+import { AccountRow } from "./AccountRow";
 import { AccountsImport } from "./AccountsImport";
+import { BulkPasswordReset } from "./BulkPasswordReset";
 import { UsersIcon } from "./icons";
+
+const PAGE_SIZE = 50;
 
 export function AccountsPanel() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search.trim());
+  const [page, setPage] = useState(1);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [deleteFor, setDeleteFor] = useState<AdminUser | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -28,13 +40,34 @@ export function AccountsPanel() {
     email: "",
   });
 
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch]);
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ["admin", "users", search],
-    queryFn: () => {
-      const qs = search.trim()
-        ? `/users/?search=${encodeURIComponent(search.trim())}`
-        : "/users/?page_size=50";
-      return apiFetch<Paginated<AdminUser>>(qs);
+    queryKey: ["admin", "users", debouncedSearch, page],
+    queryFn: () =>
+      apiFetch<Paginated<AdminUser>>(
+        buildListQuery("/users/", {
+          search: debouncedSearch || undefined,
+          page,
+          page_size: PAGE_SIZE,
+        }),
+      ),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (user: AdminUser) => apiFetch<null>(`/users/${user.id}/`, { method: "DELETE" }),
+    onSuccess: () => {
+      setDeleteFor(null);
+      setFormError(null);
+      void queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+    onError: (err: Error) => {
+      setDeleteFor(null);
+      setFormError(
+        err instanceof ApiError ? formatApiErrorPayload(err.payload, err.message) : err.message,
+      );
     },
   });
 
@@ -128,8 +161,17 @@ export function AccountsPanel() {
           >
             {importOpen ? "Close import" : "Import CSV"}
           </button>
+          <button
+            type="button"
+            onClick={() => setBulkOpen((v) => !v)}
+            className="cursor-pointer rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200 hover:border-slate-400"
+          >
+            {bulkOpen ? "Close password reset" : "Reset a section's passwords"}
+          </button>
         </div>
       </div>
+
+      {bulkOpen && <BulkPasswordReset />}
 
       {importOpen && (
         <AccountsImport
@@ -286,36 +328,33 @@ export function AccountsPanel() {
             </thead>
             <tbody>
               {data?.results.map((u) => (
-                <tr key={u.id} className="border-t border-slate-800">
-                  <td className="px-4 py-3">
-                    <span className="font-medium text-white">{u.username}</span>
-                    {u.school_id && (
-                      <span className="ml-2 text-xs text-slate-500">{u.school_id}</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 capitalize text-slate-300">{u.role}</td>
-                  <td className="px-4 py-3 text-slate-400">{u.class_section || "—"}</td>
-                  <td className="px-4 py-3 text-slate-400">
-                    {u.is_active ? "Active" : "Disabled"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setResetFor(u);
-                        setNewPassword("");
-                      }}
-                      className="cursor-pointer text-xs text-emerald-300 hover:underline"
-                    >
-                      Reset password
-                    </button>
-                  </td>
-                </tr>
+                <AccountRow
+                  key={u.id}
+                  user={u}
+                  onResetPassword={(user) => {
+                    setResetFor(user);
+                    setNewPassword("");
+                  }}
+                  onDelete={setDeleteFor}
+                />
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {data && data.count > PAGE_SIZE && (
+        <Pagination page={page} pageSize={PAGE_SIZE} count={data.count} onPageChange={setPage} />
+      )}
+
+      <ConfirmDialog
+        open={deleteFor !== null}
+        title="Delete account?"
+        body={`Permanently delete “${deleteFor?.username ?? ""}”? Accounts with submissions can't be deleted; disable them instead to keep contest results.`}
+        confirmLabel="Delete"
+        danger
+        onCancel={() => setDeleteFor(null)}
+        onConfirm={() => deleteFor && deleteMutation.mutate(deleteFor)}
+      />
     </div>
   );
 }

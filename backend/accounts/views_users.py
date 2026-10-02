@@ -1,3 +1,6 @@
+import secrets
+import string
+
 import redis
 from celery.result import AsyncResult
 from django.conf import settings
@@ -21,6 +24,16 @@ from .sessions import revoke_user_sessions
 
 # How long an import's owner record (and so its result) stays fetchable.
 IMPORT_OWNER_TTL_SECONDS = 3600
+# Hashing costs ~0.3 s per password; keep one request well inside gunicorn's
+# 30 s timeout. A class section is usually smaller than this.
+MAX_BULK_RESET = 50
+# No look-alikes (0/O, 1/l/I): passwords get read off printed slips.
+_LOOKALIKES = set("0Oo1lIi")
+_ALPHABET = "".join(c for c in string.ascii_letters + string.digits if c not in _LOOKALIKES)
+
+
+def generate_password(length: int = 10) -> str:
+    return "".join(secrets.choice(_ALPHABET) for _ in range(length))
 
 
 def _redis_client():
@@ -174,7 +187,62 @@ class UserViewSet(viewsets.ModelViewSet):
                 {"detail": "You cannot delete your own account."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # Deleting cascades to submissions, which silently rewrites past
+        # scoreboards and grades. Disabling keeps the history.
+        count = user.submissions.count()
+        if count:
+            return Response(
+                {
+                    "detail": f"{user.username} has {count} submission{'s' if count != 1 else ''}; "
+                    "disable the account instead to keep contest results intact."
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
         return super().destroy(request, *args, **kwargs)
+
+    @action(detail=False, methods=["post"], url_path="bulk-reset-password")
+    def bulk_reset_password(self, request):
+        """Give students new random passwords: {"section": "BSIT-1A"} or
+        {"usernames": [...]}. Returns the new passwords once, for the teacher
+        to hand out; existing sessions are ended. Admin accounts are never
+        included."""
+        section = request.data.get("section")
+        usernames = request.data.get("usernames")
+        students = (
+            User.objects.filter(role=User.Role.STUDENT, is_superuser=False)
+            .exclude(pk=request.user.pk)
+        )
+        if isinstance(section, str) and section.strip():
+            students = students.filter(class_section__iexact=section.strip())
+        elif isinstance(usernames, list) and usernames and all(isinstance(u, str) for u in usernames):
+            students = students.filter(username__in=[u.strip() for u in usernames])
+        else:
+            raise serializers.ValidationError(
+                {"detail": "Give a class section or a list of usernames."}
+            )
+        students = list(students.order_by("username"))
+        if not students:
+            raise serializers.ValidationError({"detail": "No student accounts matched."})
+        if len(students) > MAX_BULK_RESET:
+            raise serializers.ValidationError(
+                {"detail": f"{len(students)} students matched; reset at most {MAX_BULK_RESET} at a time."}
+            )
+        results = []
+        for user in students:
+            password = generate_password()
+            user.set_password(password)
+            user.save(update_fields=["password"])
+            revoke_user_sessions(user)
+            results.append(
+                {
+                    "username": user.username,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "class_section": user.class_section,
+                    "password": password,
+                }
+            )
+        return Response({"count": len(results), "results": results})
 
     @action(detail=True, methods=["post"], url_path="reset-password")
     def reset_password(self, request, pk=None):
