@@ -15,7 +15,9 @@ import type {
 } from "@/lib/types";
 
 import { AccountsPanel } from "./_components/AccountsPanel";
+import { ActivityPanel } from "./_components/ActivityPanel";
 import { ContestsPanel } from "./_components/ContestsPanel";
+import { JudgeHealthCard } from "./_components/JudgeHealthCard";
 import { MetricCards } from "./_components/MetricCards";
 import { ProblemsPanel } from "./_components/ProblemsPanel";
 import { SubmissionsPanel } from "./_components/SubmissionsPanel";
@@ -27,13 +29,14 @@ import {
   UsersIcon,
 } from "./_components/icons";
 
-type TabId = "problems" | "contests" | "submissions" | "accounts";
+type TabId = "problems" | "contests" | "submissions" | "accounts" | "activity";
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: "problems", label: "Problems" },
   { id: "contests", label: "Contests" },
   { id: "submissions", label: "Submissions" },
   { id: "accounts", label: "Accounts" },
+  { id: "activity", label: "Activity" },
 ];
 
 export default function AdminPage() {
@@ -166,6 +169,7 @@ export default function AdminPage() {
       </div>
 
       <MetricCards metrics={metrics} />
+      <JudgeHealthCard />
 
       <div>
         <div
@@ -206,6 +210,7 @@ export default function AdminPage() {
           {tab === "contests" && <ContestsPanel />}
           {tab === "submissions" && <SubmissionsPanel />}
           {tab === "accounts" && <AccountsPanel />}
+          {tab === "activity" && <ActivityPanel />}
         </div>
       </div>
     </div>

@@ -95,6 +95,7 @@ INSTALLED_APPS = [
     "contests",
     "submissions",
     "judge",
+    "audit",
 ]
 
 MIDDLEWARE = [

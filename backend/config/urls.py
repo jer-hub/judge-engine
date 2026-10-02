@@ -5,6 +5,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from accounts.views_auth import ThrottledTokenObtainPairView
 from config.health import healthz
 from accounts.views_logout import LogoutView
+from audit.views import AuditEventListView
+from judge.health import JudgeHealthView
 from submissions.run_views import RunPreviewResultView, RunPreviewView
 
 urlpatterns = [
@@ -19,6 +21,8 @@ urlpatterns = [
     path("api/test-cases/", include("problems.urls_test_cases")),
     path("api/contests/", include("contests.urls")),
     path("api/submissions/", include("submissions.urls")),
+    path("api/audit/", AuditEventListView.as_view(), name="audit-list"),
+    path("api/judge/health/", JudgeHealthView.as_view(), name="judge-health"),
     path("api/runs/", RunPreviewView.as_view(), name="run-preview"),
     path("api/runs/<str:task_id>/", RunPreviewResultView.as_view(), name="run-preview-result"),
 ]

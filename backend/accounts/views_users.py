@@ -16,6 +16,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 
 from accounts.permissions import CanModifyTargetUser, IsAdmin
+from audit.mixins import AuditedViewSetMixin
 
 from .csv_import import MAX_CSV_CHARS, parse_roster_csv
 from .models import User
@@ -153,7 +154,7 @@ def _format_row_errors(serializer_errors) -> str:
     return "; ".join(parts) if parts else "Invalid row."
 
 
-class UserViewSet(viewsets.ModelViewSet):
+class UserViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
     """Admin-only roster management (no public registration)."""
 
     permission_classes = [IsAuthenticated, IsAdmin, CanModifyTargetUser]

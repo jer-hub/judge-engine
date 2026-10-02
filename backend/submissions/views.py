@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 
 from accounts.permissions import IsAdmin
+from audit.mixins import AuditedViewSetMixin
 
 from .models import Submission
 from .rejudge import queue_rejudge
@@ -28,6 +29,7 @@ class SubmissionRateThrottle(UserRateThrottle):
 
 
 class SubmissionViewSet(
+    AuditedViewSetMixin,
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
     mixins.ListModelMixin,
