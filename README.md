@@ -35,8 +35,6 @@ Next.js 15  →  Django REST (JWT)  →  Redis / Celery  →  Docker Temurin 17 
 git clone https://github.com/jer-hub/judge-engine.git
 cd judge-engine
 copy .env.example .env
-# Edit .env — set JUDGE_HOST_DATA_DIR to an absolute path, e.g.
-# JUDGE_HOST_DATA_DIR=C:/path/to/judge-engine/judge_data
 mkdir judge_data -Force
 docker compose up --build -d
 docker pull eclipse-temurin:17-jdk-jammy
@@ -49,8 +47,6 @@ docker compose exec backend python manage.py seed_demo
 git clone https://github.com/jer-hub/judge-engine.git
 cd judge-engine
 cp .env.example .env
-# Edit .env — set JUDGE_HOST_DATA_DIR to an absolute path, e.g.
-# JUDGE_HOST_DATA_DIR=/home/you/judge-engine/judge_data
 mkdir -p judge_data
 docker compose up --build -d
 docker pull eclipse-temurin:17-jdk-jammy
@@ -94,7 +90,9 @@ Copy `.env.example` → `.env`. Important variables:
 | Variable | Notes |
 |----------|--------|
 | `DJANGO_SECRET_KEY` | ≥50 random chars when `DJANGO_DEBUG=False` |
-| `JUDGE_HOST_DATA_DIR` | Absolute host path (required for reliable sibling containers on Windows) |
+| `JUDGE_HOST_DATA_DIR` | Leave unset (detected automatically); set an absolute host path only if detection fails |
+| `DEV_BIND` | Dev only: `127.0.0.1` (default) or `0.0.0.0` to open ports 3000/8000 to the LAN |
+| `JUDGE_STALE_SECONDS` | When stuck or lost judging is re-queued automatically (default 900) |
 | `BOOTSTRAP_ADMIN_PASSWORD` | Initial admin password (compose bootstrap) |
 | `JWT_COOKIE_SECURE` | `true` behind HTTPS in production |
 | `NEXT_PUBLIC_API_URL` | Browser-facing API origin (default `http://localhost:8000`) |
@@ -111,7 +109,17 @@ docker compose exec backend python manage.py test
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 ```
 
-Set strong secrets, `DJANGO_DEBUG=False`, and `JWT_COOKIE_SECURE=true` behind HTTPS (Caddy is included in the prod compose overlay). See [SECURITY.md](SECURITY.md).
+Caddy is the only public entry point and gets an HTTPS certificate for `SITE_ADDRESS` automatically. Before the first start, set in `.env`:
+
+- [ ] `DJANGO_SECRET_KEY`: at least 50 random characters (e.g. `python -c "import secrets; print(secrets.token_urlsafe(64))"`)
+- [ ] `DJANGO_DEBUG=False`
+- [ ] `SITE_ADDRESS`: the public hostname, e.g. `judge.example.edu`
+- [ ] `DJANGO_ALLOWED_HOSTS`: that hostname, plus `backend` (the healthcheck uses it)
+- [ ] `DJANGO_CSRF_TRUSTED_ORIGINS`: `https://` + the hostname (needed for the Django Admin login)
+- [ ] `BOOTSTRAP_ADMIN_PASSWORD`: your own strong password. The admin is created on first start; the dev default from this README is refused
+- [ ] `POSTGRES_PASSWORD`: change it from the dev default
+
+Backups run nightly into `./backups` (see [docs/BACKUPS.md](docs/BACKUPS.md)); copy them off the machine. Keep the `worker` service at one instance: it also runs the stuck-submission recovery sweep. See [SECURITY.md](SECURITY.md).
 
 ## Docs
 

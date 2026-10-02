@@ -1,7 +1,9 @@
+import os
 import socket
 from unittest.mock import MagicMock, patch
 
 import docker
+from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 
 from judge.executor import (
@@ -187,6 +189,32 @@ class ExecutorLimitsTests(SimpleTestCase):
             stderr="java.lang.NullPointerException",
         )
         self.assertEqual(executor._classify_run(crashed, "x"), "RuntimeError")
+
+    @patch("judge.executor.docker.from_env")
+    def test_host_data_dir_explicit_absolute_paths(self, mocked_from_env):
+        for path in ("/srv/judge_data", "C:/judge/judge_data", "D:\\judge_data"):
+            with patch.dict(os.environ, {"JUDGE_HOST_DATA_DIR": path}):
+                executor, _ = self._executor(mocked_from_env)
+                self.assertEqual(executor.host_data_dir, path)
+
+    @patch("judge.executor.docker.from_env")
+    def test_host_data_dir_rejects_relative_path(self, mocked_from_env):
+        with patch.dict(os.environ, {"JUDGE_HOST_DATA_DIR": "./judge_data"}):
+            executor, _ = self._executor(mocked_from_env)
+            with self.assertRaises(ImproperlyConfigured):
+                executor.host_data_dir
+
+    @patch("judge.executor.docker.from_env")
+    def test_host_data_dir_detected_from_own_mounts(self, mocked_from_env):
+        with patch.dict(os.environ, {"JUDGE_HOST_DATA_DIR": "", "JUDGE_DATA_DIR": "/judge_data"}):
+            executor, _ = self._executor(mocked_from_env)
+            mocked_from_env.return_value.containers.get.return_value.attrs = {
+                "Mounts": [
+                    {"Destination": "/app", "Source": "/host/backend"},
+                    {"Destination": "/judge_data", "Source": "/run/desktop/mnt/host/c/judge_data"},
+                ]
+            }
+            self.assertEqual(executor.host_data_dir, "/run/desktop/mnt/host/c/judge_data")
 
     def test_run_command_sizes_stack_and_heap(self):
         cmd = _java_run_command(256)

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import docker
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from docker.types import LogConfig
 
 logger = logging.getLogger("judge")
@@ -33,6 +34,12 @@ class SandboxError(Exception):
     Raised instead of returning a verdict so the task can retry and, if the
     failure persists, record SystemError rather than charging the student.
     """
+
+
+def _is_absolute_host_path(path: str) -> bool:
+    # The daemon may run on Windows, where os.path.isabs() (Linux rules here)
+    # would reject "C:/..." paths.
+    return path.startswith("/") or re.match(r"^[A-Za-z]:[\\/]", path) is not None
 
 
 def _java_run_command(memory_limit_mb: int) -> list[str]:
@@ -67,8 +74,39 @@ class JudgeExecutor:
         self.client = docker.from_env()
         self.image = settings.JUDGE_IMAGE
         self.data_dir = Path(os.environ.get("JUDGE_DATA_DIR", "/judge_data"))
-        self.host_data_dir = os.environ.get(
-            "JUDGE_HOST_DATA_DIR", str(self.data_dir)
+        self._host_data_dir: str | None = None
+
+    @property
+    def host_data_dir(self) -> str:
+        """Where ``data_dir`` lives on the Docker host: sandbox bind mounts are
+        resolved by the daemon, not inside this (worker) container."""
+        if self._host_data_dir is None:
+            self._host_data_dir = self._resolve_host_data_dir()
+        return self._host_data_dir
+
+    def _resolve_host_data_dir(self) -> str:
+        configured = os.environ.get("JUDGE_HOST_DATA_DIR", "").strip()
+        if configured:
+            if not _is_absolute_host_path(configured):
+                raise ImproperlyConfigured(
+                    f"JUDGE_HOST_DATA_DIR must be an absolute host path, got {configured!r}. "
+                    "Unset it to detect the path automatically."
+                )
+            return configured
+        # In a container: ask Docker which host folder is mounted at data_dir.
+        try:
+            me = self.client.containers.get(socket.gethostname())
+            for mount in me.attrs.get("Mounts", []):
+                if mount.get("Destination") == str(self.data_dir):
+                    return mount["Source"]
+        except docker.errors.DockerException:
+            logger.debug("Could not inspect own container", exc_info=True)
+        if not os.path.exists("/.dockerenv"):
+            # Running directly on the host: both sides see the same path.
+            return str(self.data_dir.resolve())
+        raise ImproperlyConfigured(
+            f"Cannot find the host folder mounted at {self.data_dir}; "
+            "set JUDGE_HOST_DATA_DIR to its absolute host path."
         )
 
     def cleanup_orphans(self, older_than: datetime) -> int:

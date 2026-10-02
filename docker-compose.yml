@@ -64,8 +64,10 @@ services:
     volumes:
       - ./backend:/app
       - media_data:/app/media
+    # Loopback by default: dev runs with DEBUG and a published admin password.
+    # Set DEV_BIND=0.0.0.0 in .env to reach it from other PCs on purpose.
     ports:
-      - "8000:8000"
+      - "${DEV_BIND:-127.0.0.1}:8000:8000"
     healthcheck:
       # Host "backend" must be in DJANGO_ALLOWED_HOSTS (it is in .env.example).
       test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen(u.Request('http://127.0.0.1:8000/healthz/', headers={'Host': 'backend'}), timeout=5)"]
@@ -96,7 +98,8 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       JUDGE_DATA_DIR: /judge_data
-      JUDGE_HOST_DATA_DIR: ${JUDGE_HOST_DATA_DIR:-./judge_data}
+      # Empty: the worker asks Docker which host folder backs /judge_data.
+      JUDGE_HOST_DATA_DIR: ${JUDGE_HOST_DATA_DIR:-}
       CELERY_NODE: judge
     volumes:
       - ./backend:/app
@@ -126,7 +129,8 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
       JUDGE_DATA_DIR: /judge_data
-      JUDGE_HOST_DATA_DIR: ${JUDGE_HOST_DATA_DIR:-./judge_data}
+      # Empty: the worker asks Docker which host folder backs /judge_data.
+      JUDGE_HOST_DATA_DIR: ${JUDGE_HOST_DATA_DIR:-}
       CELERY_NODE: preview
     volumes:
       - ./backend:/app
@@ -138,6 +142,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      # Migrations run in the backend's startup command.
+      backend:
+        condition: service_started
 
   frontend:
     build:
@@ -149,6 +156,9 @@ services:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       INTERNAL_API_URL: http://backend:8000
       JWT_COOKIE_SECURE: "false"
+      # Cookie lifetimes must match the backend's token lifetimes.
+      JWT_ACCESS_MINUTES: ${JWT_ACCESS_MINUTES:-60}
+      JWT_REFRESH_DAYS: ${JWT_REFRESH_DAYS:-7}
       # Docker Desktop on Windows/macOS does not forward file-change events
       # into bind mounts, so without polling edits never hot-reload.
       WATCHPACK_POLLING: "true"
@@ -159,7 +169,7 @@ services:
       # host `npm run build` doesn't clobber the running dev server.
       - frontend_next:/app/.next
     ports:
-      - "3000:3000"
+      - "${DEV_BIND:-127.0.0.1}:3000:3000"
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/login >/dev/null || exit 1"]
       interval: 30s
