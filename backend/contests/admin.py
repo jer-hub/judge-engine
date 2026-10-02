@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Contest, ContestParticipant, ContestProblem
+from .models import Clarification, Contest, ContestParticipant, ContestProblem
 
 
 class ContestProblemInline(admin.TabularInline):
@@ -48,3 +48,11 @@ class ContestParticipantAdmin(admin.ModelAdmin):
     list_filter = ("contest",)
     autocomplete_fields = ("contest", "user")
     search_fields = ("user__username", "contest__title")
+
+
+@admin.register(Clarification)
+class ClarificationAdmin(admin.ModelAdmin):
+    list_display = ("contest", "author", "problem", "is_public", "created_at", "answered_at")
+    list_filter = ("contest", "is_public")
+    search_fields = ("question", "answer", "author__username")
+    raw_id_fields = ("author", "answered_by", "problem")

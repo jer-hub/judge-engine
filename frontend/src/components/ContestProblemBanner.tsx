@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 
+import { useClarifications } from "@/components/ContestClarifications";
 import { Countdown } from "@/components/Countdown";
 import type { ContestDetail } from "@/lib/types";
 
@@ -18,6 +19,11 @@ type Props = {
 export function ContestProblemBanner({ contest, slug, onPhaseChange }: Props) {
   const letter = contest.problems.find((p) => p.problem.slug === slug)?.letter;
   const over = contest.my_status === "past";
+  const { data: clarifications } = useClarifications(contest.id, !over);
+  // Newest public item for everyone, or for this problem.
+  const latest = clarifications?.find(
+    (c) => c.is_public && c.answered_at && (!c.problem_letter || c.problem_letter === letter),
+  );
 
   return (
     <div
@@ -36,6 +42,17 @@ export function ContestProblemBanner({ contest, slug, onPhaseChange }: Props) {
             Scoreboard
           </Link>
         </p>
+        {latest && !over && (
+          <p className="text-xs text-sky-200">
+            <span className="font-semibold">
+              {latest.is_announcement ? "Announcement" : "Clarification"}:
+            </span>{" "}
+            {latest.answer}{" "}
+            <Link href={`/contests/${contest.id}`} className="text-sky-300 hover:underline">
+              all
+            </Link>
+          </p>
+        )}
         {over && (
           <p className="text-xs text-slate-400">
             Your time for this contest is over; submissions are closed.{" "}
