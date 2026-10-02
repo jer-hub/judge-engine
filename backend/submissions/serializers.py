@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
@@ -101,13 +103,14 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
 
         if contest is not None:
             now = timezone.now()
-            if now < contest.start_time or now > contest.end_time:
+            participant = ContestParticipant.objects.filter(contest=contest, user=user).first()
+            # A time extension moves this student's end, not the contest's.
+            extra = timedelta(minutes=participant.extra_minutes if participant else 0)
+            if now < contest.start_time or now > contest.end_time + extra:
                 raise serializers.ValidationError(
                     {"contest": "Submissions are only allowed during the contest window."}
                 )
-            if not ContestParticipant.objects.filter(
-                contest=contest, user=user
-            ).exists():
+            if participant is None:
                 raise serializers.ValidationError(
                     {"contest": "You must register for the contest first."}
                 )

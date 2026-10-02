@@ -42,7 +42,7 @@ class ContestParticipantSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ContestParticipant
-        fields = ("id", "user_id", "username", "registered_at")
+        fields = ("id", "user_id", "username", "registered_at", "extra_minutes")
 
 
 class ContestListSerializer(serializers.ModelSerializer):
@@ -75,6 +75,9 @@ class ContestDetailSerializer(serializers.ModelSerializer):
     participants = ContestParticipantSerializer(many=True, read_only=True)
     is_registered = serializers.SerializerMethodField()
     server_time = serializers.SerializerMethodField()
+    # The viewer's own window, which a time extension moves past end_time.
+    my_end_time = serializers.SerializerMethodField()
+    my_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Contest
@@ -88,10 +91,14 @@ class ContestDetailSerializer(serializers.ModelSerializer):
             "status",
             "is_frozen",
             "freeze_scoreboard_minutes_before_end",
+            "hold_results_until_revealed",
+            "results_revealed_at",
             "problems",
             "participants",
             "is_registered",
             "server_time",
+            "my_end_time",
+            "my_status",
         )
 
     def get_is_registered(self, obj: Contest) -> bool:
@@ -104,6 +111,21 @@ class ContestDetailSerializer(serializers.ModelSerializer):
 
     def get_server_time(self, obj: Contest) -> str:
         return timezone.now().isoformat()
+
+    def _my_end(self, obj: Contest):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return obj.end_time
+        return obj.end_time_for(request.user)
+
+    def get_my_end_time(self, obj: Contest) -> str:
+        return self._my_end(obj).isoformat()
+
+    def get_my_status(self, obj: Contest) -> str:
+        now = timezone.now()
+        if now < obj.start_time:
+            return "upcoming"
+        return "active" if now <= self._my_end(obj) else "past"
 
     def to_representation(self, instance: Contest):
         data = super().to_representation(instance)
@@ -161,6 +183,7 @@ class ContestWriteSerializer(serializers.ModelSerializer):
             "end_time",
             "is_public",
             "freeze_scoreboard_minutes_before_end",
+            "hold_results_until_revealed",
             "problems",
             "participant_usernames",
         )

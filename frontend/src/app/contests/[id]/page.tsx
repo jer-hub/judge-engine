@@ -34,7 +34,11 @@ export default function ContestDetailPage() {
     return <p className="text-red-300">{(error as Error)?.message || "Not found"}</p>;
   }
 
-  const canSubmit = data.status === "active" && data.is_registered;
+  // my_status/my_end_time include this student's time extension, if any.
+  const canSubmit = data.my_status === "active" && data.is_registered;
+  const extraMinutes = Math.round(
+    (new Date(data.my_end_time).getTime() - new Date(data.end_time).getTime()) / 60000,
+  );
 
   return (
     <div className="space-y-6">
@@ -45,7 +49,7 @@ export default function ContestDetailPage() {
         </div>
         <Countdown
           startTime={data.start_time}
-          endTime={data.end_time}
+          endTime={data.my_end_time}
           serverTime={data.server_time}
           // Start reveals the problems and enables links; end disables them.
           onPhaseChange={refetchContest}
@@ -66,6 +70,11 @@ export default function ContestDetailPage() {
         {data.is_registered && (
           <span className="rounded bg-slate-800 px-3 py-2 text-sm text-emerald-300">
             Registered
+          </span>
+        )}
+        {extraMinutes > 0 && (
+          <span className="rounded bg-sky-950/60 px-3 py-2 text-sm text-sky-200">
+            You have {extraMinutes} extra minute{extraMinutes === 1 ? "" : "s"}
           </span>
         )}
         <Link
