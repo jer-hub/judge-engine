@@ -20,7 +20,7 @@
     "@tiptap/starter-kit": "^3.31.4",
     "dompurify": "^3.4.16",
     "marked": "^18.0.13",
-    "next": "^15.5.27",
+    "next": "^16.3.7",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-markdown": "^10.1.0",
