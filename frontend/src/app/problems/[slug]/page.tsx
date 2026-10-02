@@ -2,10 +2,11 @@
 
 import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { CodeEditor, JAVA_STUB } from "@/components/CodeEditor";
 import { ContestProblemBanner } from "@/components/ContestProblemBanner";
+import { MySubmissions, mySubmissionsKey } from "@/components/MySubmissions";
 import { StatementContent } from "@/components/StatementContent";
 import { SubmissionStatus, VerdictBadge } from "@/components/SubmissionStatus";
 import { ApiError, apiFetch } from "@/lib/api";
@@ -37,6 +38,7 @@ function ProblemDetailInner() {
     };
   }, []);
 
+  const queryClient = useQueryClient();
   const { data: problem, isLoading, error } = useQuery({
     queryKey: ["problem", slug],
     queryFn: () => apiFetch<ProblemDetail>(`/problems/${slug}/`),
@@ -89,7 +91,12 @@ function ProblemDetailInner() {
           language: "java",
         }),
       }),
-    onSuccess: (data) => setSubmissionId(data.id),
+    onSuccess: (data) => {
+      setSubmissionId(data.id);
+      void queryClient.invalidateQueries({ queryKey: mySubmissionsKey(data.problem) });
+      // The problem list's solved/attempted markers.
+      void queryClient.invalidateQueries({ queryKey: ["problems"] });
+    },
   });
 
   const run = useMutation({
@@ -308,6 +315,7 @@ function ProblemDetailInner() {
         )}
 
         <SubmissionStatus submissionId={submissionId} />
+        <MySubmissions problemId={problem.id} />
       </section>
     </div>
   );
