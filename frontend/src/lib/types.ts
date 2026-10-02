@@ -78,6 +78,11 @@ export type ContestDetail = ContestListItem & {
   is_frozen: boolean;
   is_registered: boolean;
   server_time: string;
+  hold_results_until_revealed: boolean;
+  results_revealed_at: string | null;
+  /** The viewer's own window: a time extension moves it past end_time. */
+  my_end_time: string;
+  my_status: "upcoming" | "active" | "past";
   problems: Array<{
     id: number;
     letter: string;
@@ -92,6 +97,7 @@ export type ContestDetail = ContestListItem & {
     user_id: number;
     username: string;
     registered_at: string;
+    extra_minutes: number;
   }>;
 };
 

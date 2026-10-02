@@ -11,6 +11,8 @@ import {
   formatApiErrorPayload,
 } from "@/lib/admin";
 import { ApiError, apiFetch } from "@/lib/api";
+
+import { ContestResultsControls } from "./ContestResultsControls";
 import { fetchAllPages } from "@/lib/pagination";
 import type { AdminUser, ContestDetail, ProblemListItem } from "@/lib/types";
 
@@ -79,6 +81,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
   const [endTime, setEndTime] = useState("");
   const [isPublic, setIsPublic] = useState(true);
   const [freeze, setFreeze] = useState(0);
+  const [holdResults, setHoldResults] = useState(false);
   const [problems, setProblems] = useState<ProblemRow[]>([]);
   const [participantSet, setParticipantSet] = useState<string[]>([]);
   const [rosterSearch, setRosterSearch] = useState("");
@@ -116,6 +119,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
     setEndTime(toLocalInputValue(new Date(c.end_time)));
     setIsPublic(c.is_public);
     setFreeze(c.freeze_scoreboard_minutes_before_end);
+    setHoldResults(c.hold_results_until_revealed);
     setProblems(
       withLetters(
         c.problems.map((p) => ({
@@ -209,6 +213,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
           end_time: new Date(endTime).toISOString(),
           is_public: isPublic,
           freeze_scoreboard_minutes_before_end: freeze,
+          hold_results_until_revealed: holdResults,
           problems: withLetters(problems),
           participant_usernames: participantSet,
         }),
@@ -531,7 +536,27 @@ export function ContestEditor({ contestId, onClose }: Props) {
             Uncheck for invite-only (use the participants list below).
           </span>
         </label>
+        <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+          <span className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={holdResults}
+              onChange={(e) => {
+                markDirty();
+                setHoldResults(e.target.checked);
+              }}
+              className="cursor-pointer"
+            />
+            <span>Keep the scoreboard frozen after the end until I reveal it</span>
+          </span>
+          <span className="text-xs text-slate-500">
+            For an announcement, or while students with extra time are still working. Reveal
+            below.
+          </span>
+        </label>
       </div>
+
+      {detail.data && <ContestResultsControls contest={detail.data} />}
 
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">

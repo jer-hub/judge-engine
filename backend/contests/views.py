@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -11,7 +12,7 @@ from accounts.permissions import IsAdmin
 
 from .export import standings_csv
 from .models import Contest, ContestParticipant
-from .scoreboard import build_scoreboard
+from .scoreboard import build_scoreboard, invalidate_scoreboard_cache
 from .serializers import (
     ContestDetailSerializer,
     ContestListSerializer,
@@ -49,7 +50,10 @@ class ContestViewSet(viewsets.ModelViewSet):
         return ContestListSerializer
 
     def get_permissions(self):
-        if self.action in ("create", "update", "partial_update", "destroy", "standings_export"):
+        if self.action in (
+            "create", "update", "partial_update", "destroy",
+            "reveal", "extensions", "standings_export",
+        ):
             return [IsAuthenticated(), IsAdmin()]
         return [IsAuthenticated()]
 
@@ -69,6 +73,48 @@ class ContestViewSet(viewsets.ModelViewSet):
         return Response(
             {"registered": True, "created": created},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["post"], url_path="reveal")
+    def reveal(self, request, pk=None):
+        """Admin: lift the scoreboard freeze now ({"revealed": true}), or
+        freeze it again ({"revealed": false})."""
+        contest = self.get_object()
+        revealed = request.data.get("revealed", True)
+        if not isinstance(revealed, bool):
+            raise ValidationError({"revealed": "Must be true or false."})
+        contest.results_revealed_at = timezone.now() if revealed else None
+        contest.save(update_fields=["results_revealed_at"])
+        invalidate_scoreboard_cache(contest.id)
+        return Response(ContestDetailSerializer(contest, context={"request": request}).data)
+
+    @action(detail=True, methods=["post"], url_path="extensions")
+    def extensions(self, request, pk=None):
+        """Admin: give a registered student extra minutes ({"username",
+        "extra_minutes"}; 0 removes the extension)."""
+        contest = self.get_object()
+        username = request.data.get("username")
+        extra = request.data.get("extra_minutes")
+        if not isinstance(username, str) or not username.strip():
+            raise ValidationError({"username": "Required."})
+        if isinstance(extra, bool) or not isinstance(extra, int) or not 0 <= extra <= 24 * 60:
+            raise ValidationError({"extra_minutes": "Whole minutes from 0 to 1440."})
+        participant = (
+            ContestParticipant.objects.filter(contest=contest, user__username__iexact=username.strip())
+            .select_related("user")
+            .first()
+        )
+        if participant is None:
+            raise ValidationError({"username": "Not registered for this contest."})
+        participant.extra_minutes = extra
+        participant.save(update_fields=["extra_minutes"])
+        invalidate_scoreboard_cache(contest.id)
+        return Response(
+            {
+                "username": participant.user.username,
+                "extra_minutes": participant.extra_minutes,
+                "ends_at": contest.end_time_for(participant.user).isoformat(),
+            }
         )
 
     @action(detail=True, methods=["get"], url_path="scoreboard")

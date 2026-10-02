@@ -51,7 +51,9 @@ export default function ScoreboardPage() {
         </div>
         {data.is_frozen && (
           <span className="rounded bg-amber-900/50 px-3 py-1 text-sm text-amber-200">
-            Scoreboard frozen
+            {data.status === "past"
+              ? "Results held: final standings will be revealed by your teacher"
+              : "Scoreboard frozen"}
           </span>
         )}
       </div>

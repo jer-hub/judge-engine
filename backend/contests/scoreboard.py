@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from datetime import timedelta
 from typing import Any
 
 import redis
@@ -78,19 +79,24 @@ def _compute_scoreboard(
     problem_ids = [cp.problem_id for cp in problems]
     letter_by_problem = {cp.problem_id: cp.letter for cp in problems}
 
+    # Each participant's window ends at the contest end plus their extension.
+    end_by_user = {
+        p.user_id: contest.end_time + timedelta(minutes=p.extra_minutes) for p in participants
+    }
+    latest_end = max(end_by_user.values(), default=contest.end_time)
     submissions = (
         Submission.objects.filter(
             contest=contest,
             problem_id__in=problem_ids,
             submitted_at__gte=contest.start_time,
-            submitted_at__lte=contest.end_time,
+            submitted_at__lte=latest_end,
         )
         .select_related("user")
         .order_by("submitted_at", "id")
     )
 
     freeze_at = contest.freeze_at
-    apply_freeze = bool(freeze_at and contest.status == "active" and not reveal_frozen)
+    apply_freeze = bool(freeze_at and contest.is_frozen and not reveal_frozen)
 
     # user_id -> problem_id -> state
     state: dict[int, dict[int, dict[str, Any]]] = defaultdict(
@@ -106,6 +112,8 @@ def _compute_scoreboard(
     )
 
     for sub in submissions:
+        if sub.submitted_at > end_by_user.get(sub.user_id, contest.end_time):
+            continue
         cell = state[sub.user_id][sub.problem_id]
         if cell["solved"]:
             continue
