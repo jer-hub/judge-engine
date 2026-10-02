@@ -534,8 +534,8 @@ class JudgeExecutor:
         if run.timed_out:
             return "TimeLimitExceeded"
         if run.output_limit_exceeded:
-            # No dedicated verdict in the model; oversized output is never correct.
-            return "WrongAnswer"
+            # Usually a print in an endless loop; never a correct answer.
+            return "OutputLimitExceeded"
         if run.exit_code not in (0,):
             return "RuntimeError"
         if normalize_output(run.stdout) == normalize_output(expected_output):

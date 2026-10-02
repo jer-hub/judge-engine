@@ -138,7 +138,7 @@ class ExecutorLimitsTests(SimpleTestCase):
             )
         api.kill.assert_called_once_with("abc")
         self.assertTrue(result.output_limit_exceeded)
-        self.assertEqual(executor._classify_run(result, "x"), "WrongAnswer")
+        self.assertEqual(executor._classify_run(result, "x"), "OutputLimitExceeded")
 
     @patch("judge.executor.docker.from_env")
     def test_feed_stdin_tolerates_early_exit(self, mocked_from_env):
