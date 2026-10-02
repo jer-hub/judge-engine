@@ -1,6 +1,10 @@
 "use client";
 
-import Editor from "@monaco-editor/react";
+import Editor, { loader } from "@monaco-editor/react";
+
+// Load Monaco from this app (public/monaco, copied at dev/build time), not
+// a CDN: labs without internet access would otherwise get no editor.
+loader.config({ paths: { vs: "/monaco/vs" } });
 
 const JAVA_STUB = `import java.util.*;
 

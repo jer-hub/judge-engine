@@ -26,6 +26,8 @@ ENV NODE_ENV=production \
 # Standalone output: a minimal server.js with only the traced node_modules.
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+# Static files, including the self-hosted Monaco editor (scripts/copy-monaco.mjs).
+COPY --from=builder --chown=node:node /app/public ./public
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
