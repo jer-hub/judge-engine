@@ -33,14 +33,14 @@ Judge Engine is a **school-based competitive programming platform** where studen
 
 | Layer      | Technology         | Version | Purpose                          |
 |------------|-------------------|---------|----------------------------------|
-| Frontend   | Next.js            | 14      | React server-side rendering      |
-| Frontend   | React              | 18      | UI components                    |
+| Frontend   | Next.js            | 15      | App Router + auth cookie proxy   |
+| Frontend   | React              | 19      | UI components                    |
 | Frontend   | TypeScript         | 5       | Type safety                      |
 | Frontend   | Tailwind CSS       | 3       | Styling                          |
-| API        | Django             | 4.2     | REST framework                   |
-| API        | Django REST        | 3.14    | Serialization + views            |
-| API        | PyJWT              | 2       | JWT tokens                       |
-| Queue      | Celery             | 5       | Async submission processing      |
+| API        | Django             | 5.2     | Web framework + Django Admin     |
+| API        | Django REST        | 3.18    | Serialization + views            |
+| API        | SimpleJWT          | 5       | JWT tokens (rotation, blacklist) |
+| Queue      | Celery             | 5.6     | Judging tasks + recovery sweep   |
 | Queue      | Redis              | 7       | Message broker + cache           |
 | Database   | PostgreSQL         | 16      | Persistent data                  |
 | Sandbox    | Eclipse Temurin    | 17 JDK  | Java execution + isolation       |
@@ -58,38 +58,38 @@ Judge Engine is a **school-based competitive programming platform** where studen
 - `/login` — JWT cookie-based auth
 - `/problems` — Problem list + detail
 - `/contests` — Contest list + registration
-- `/contest/[id]` — Contest detail + submission
-- `/scoreboard` — Live contest rankings (ICPC-style)
-- `/admin` — Redirect to Django Admin
+- `/contests/[id]` — Contest detail + registration
+- `/contests/[id]/scoreboard` — Live contest rankings (ICPC-style)
+- `/submissions` — Own submissions and verdicts
+- `/admin` — Admin UI (problems, test cases, contests, accounts, submissions); links to Django Admin
 
 **Key Features:**
 - Monaco Editor for Java code
 - Real-time submission polling (client-side)
-- JWT token refresh in background
+- Tokens refreshed server-side by the `/api/proxy` route (the browser never sees them)
 - Responsive design (desktop + tablet)
 
 ### Backend (`./backend`)
 
-**Framework:** Django 4.2 + Django REST Framework (DRF)
+**Framework:** Django 5.2 + Django REST Framework (DRF)
 
 **Apps:**
 - **`accounts`** — Custom `User` model with `role` field (`admin`/`student`)
-- **`problems`** — Problem definitions, samples, hidden tests
-- **`submissions`** — Student submissions + verdicts
-- **`contests`** — Contest scheduling, registration, rules
-- **`scoreboard`** — ICPC-style rankings + penalty scoring
-- **`api`** — REST endpoints + JWT authentication
+- **`problems`** — Problem definitions + test cases (samples and hidden)
+- **`submissions`** — Student submissions, per-test results, practice "Run"
+- **`contests`** — Scheduling, registration, freeze; ICPC scoreboard in `contests/scoreboard.py`
+- **`judge`** — Docker sandbox executor + Celery tasks (`judge/executor.py`, `judge/tasks.py`)
 
 **Key Models:**
 ```
 User (role: admin/student)
-  ├─ Problem (title, difficulty, time_limit, memory_limit)
-  │  ├─ Sample (in/out)
-  │  └─ HiddenTest (in/out — not shown to students)
-  ├─ Submission (code, verdict, execution_time)
-  ├─ Contest (title, start_time, duration, freeze_time)
-  │  └─ ContestProblem (problem, order, visible_after)
-  └─ ContestRegistration (student, contest)
+  ├─ Problem (title, slug, difficulty, time_limit_ms, memory_limit_mb, is_published)
+  │  └─ TestCase (input, expected output, is_sample — hidden unless a sample)
+  ├─ Submission (source, status, judge_claim, judged_at)
+  │  └─ SubmissionResult (per test case: verdict, time, output snippets)
+  └─ Contest (start_time, end_time, freeze_scoreboard_minutes_before_end)
+     ├─ ContestProblem (problem, letter, display_order)
+     └─ ContestParticipant (user)
 ```
 
 **Authentication:**
@@ -114,9 +114,11 @@ User (role: admin/student)
 3. Creates isolated Docker container (Temurin 17 JDK)
 4. Compiles Java code (timeout: 10s)
 5. Runs against hidden tests (timeout: 2s per test, memory: 256 MB)
-6. Captures verdict: `Accepted`, `CompilationError`, `WrongAnswer`, `RuntimeError`, `TimeLimitExceeded`, `MemoryLimitExceeded`
-7. Stores result in database
+6. Captures verdict: `Accepted`, `CompileError`, `WrongAnswer`, `RuntimeError`, `TimeLimitExceeded`, `MemoryLimitExceeded`, or `SystemError`
+7. Stores the result, but only if the task still holds the submission's claim (a rejudge revokes it)
 8. Frontend polls for verdict
+
+**Recovery:** Celery beat, embedded in the judge worker, runs `recover_stuck_submissions` every minute. It re-queues submissions stuck in `Judging` or lost while `Pending` for longer than `JUDGE_STALE_SECONDS`, retries `SystemError` up to 3 times, and removes orphaned sandbox containers and workspaces. Keep the judge worker at one instance.
 
 **Sandboxing:**
 - Each test runs in a fresh container
@@ -127,10 +129,11 @@ User (role: admin/student)
 **Verdict Determination:**
 - `Accepted` — all tests passed
 - `WrongAnswer` — output mismatch
-- `CompilationError` — `javac` failed
+- `CompileError` — `javac` failed (no attempt or penalty in contests)
 - `RuntimeError` — uncaught exception or non-zero exit
-- `TimeLimitExceeded` — execution > 2s
-- `MemoryLimitExceeded` — RSS > 256 MB
+- `TimeLimitExceeded` — process time over the problem's limit (includes JVM startup; minimum limit 1000 ms)
+- `MemoryLimitExceeded` — container memory limit hit, or Java `OutOfMemoryError`
+- `SystemError` — the judge itself failed (Docker error, task time limit, problem without tests); no penalty, re-judged automatically
 
 ### Cache & Queue (`Redis`)
 
@@ -140,13 +143,13 @@ User (role: admin/student)
 
 **Expiry Policies:**
 - Submission results: never (stored in DB)
-- Scoreboard cache: 5 minutes (recalculated on contest change)
+- Scoreboard cache: 5 seconds, cleared whenever a contest submission is judged
 
 ### Database (`PostgreSQL`)
 
 **Persistence:**
 - User accounts + roles
-- Problem definitions + test cases (hidden tests have `is_visible=false`)
+- Problem definitions + test cases (hidden tests have `is_sample=false`)
 - Submissions + verdicts
 - Contest metadata + registrations
 - Django session/token tables
@@ -175,9 +178,9 @@ User (role: admin/student)
    ↓ View enforces role / object permissions
 
 4. Token expires at T+60min
-   ↓ Client detects 401 → POST /api/auth/refresh/ (uses refresh cookie)
-   ↓ New access token issued
-   ↓ Transparent to user
+   ↓ The Next.js proxy sees the expired access cookie → POST /api/auth/refresh/
+   ↓ New tokens set as cookies (refresh tokens rotate)
+   ↓ Transparent to user; if refresh fails, the app redirects to /login
 ```
 
 ### Role-Based Access Control
@@ -249,7 +252,7 @@ Compute ICPC scores for each student:
   - Rank by (solved_count, total_penalty_minutes)
   - Penalty = sum of (time_of_solve + 20*failed_attempts)
     ↓
-Redis cache score for 5 minutes
+Cache the scoreboard for 5 seconds
     ↓
 Frontend: Render table
 ```
@@ -262,7 +265,7 @@ Frontend: Render table
 docker compose up --build -d
 ```
 
-Runs all services with hot-reload (volumes mounted).
+Runs all services with hot reload (source bind-mounted; the frontend polls for changes, since Docker Desktop does not forward file events). Ports listen on 127.0.0.1 unless `DEV_BIND` says otherwise.
 
 ### Production
 
@@ -271,13 +274,13 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
 ```
 
 Changes:
-- Gunicorn workers increased (3 → 8+)
-- `DJANGO_DEBUG=False`
-- `DJANGO_SECRET_KEY` randomized
-- `JWT_COOKIE_SECURE=True` (requires HTTPS)
-- Static files collected (`collectstatic`)
-- Celery concurrency increased (2 → 4+)
-- Caddy reverse proxy (optional, for HTTPS termination)
+- Caddy is the only public entry point (HTTPS for `SITE_ADDRESS`); no other ports are published
+- Frontend runs the built standalone server; backend runs gunicorn (3 workers) without source mounts
+- `DJANGO_DEBUG=False`, `JWT_COOKIE_SECURE=true`
+- Judge concurrency `JUDGE_CONCURRENCY` (default 4), previews `JUDGE_PREVIEW_CONCURRENCY` (default 2)
+- db and redis restart automatically; Redis persists its queue (AOF)
+- The admin is created on first start from `BOOTSTRAP_ADMIN_PASSWORD` (the published dev default is refused)
+- Nightly `pg_dump` backups into `./backups` (see `docs/BACKUPS.md`)
 
 **Secrets Management:**
 - Rotate `DJANGO_SECRET_KEY` before public deployment

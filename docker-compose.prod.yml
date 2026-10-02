@@ -4,14 +4,26 @@
 services:
   db:
     ports: !reset []
+    restart: unless-stopped
 
   redis:
     ports: !reset []
+    restart: unless-stopped
+    # Persist the queue: without it, recreating Redis drops queued judging
+    # (the recovery sweep would re-queue it, but only after the stale window).
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
 
   backend:
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py collectstatic --noinput &&
+             if [ -n \"$$BOOTSTRAP_ADMIN_PASSWORD\" ]; then
+               python manage.py bootstrap_admin --username $${BOOTSTRAP_ADMIN_USER:-admin};
+             else
+               echo 'BOOTSTRAP_ADMIN_PASSWORD not set: no admin account created';
+             fi &&
              gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
     restart: unless-stopped
     environment:
@@ -118,5 +130,6 @@ services:
     restart: unless-stopped
 
 volumes:
+  redis_data:
   caddy_data:
   caddy_config:

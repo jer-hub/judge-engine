@@ -1,8 +1,11 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 import os
 
 WEAK_PASSWORDS = frozenset({"admin123", "password", "admin", "demo123"})
+# The dev default from .env.example and the README: public, so dev only.
+DEV_DEFAULT_PASSWORD = "JudgeDev-Admin-ChangeMe!"
 
 
 class Command(BaseCommand):
@@ -30,6 +33,11 @@ class Command(BaseCommand):
         if User.objects.filter(username=username).exists():
             self.stdout.write(self.style.WARNING(f"User '{username}' already exists"))
             return
+        if password == DEV_DEFAULT_PASSWORD and not settings.DEBUG:
+            raise CommandError(
+                "Refusing the published dev password outside DEBUG. "
+                "Set a unique BOOTSTRAP_ADMIN_PASSWORD."
+            )
         user = User.objects.create_superuser(
             username=username,
             email=options["email"],

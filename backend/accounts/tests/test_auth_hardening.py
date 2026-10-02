@@ -148,3 +148,22 @@ class BootstrapAdminTests(TestCase):
 
         with self.assertRaises(CommandError):
             call_command("bootstrap_admin", username="newadmin", password="admin123")
+
+    def test_published_dev_password_only_in_debug(self):
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        from django.test import override_settings
+
+        from accounts.management.commands.bootstrap_admin import DEV_DEFAULT_PASSWORD
+
+        dev_password = DEV_DEFAULT_PASSWORD
+        with override_settings(DEBUG=False), self.assertRaises(CommandError):
+            call_command("bootstrap_admin", username="prodadmin", password=dev_password)
+        self.assertFalse(User.objects.filter(username="prodadmin").exists())
+
+        with override_settings(DEBUG=True):
+            call_command("bootstrap_admin", username="devadmin", password=dev_password)
+        self.assertTrue(User.objects.filter(username="devadmin").exists())
+        # A restart with the admin already present is never blocked.
+        with override_settings(DEBUG=False):
+            call_command("bootstrap_admin", username="devadmin", password=dev_password)
