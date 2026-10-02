@@ -1,12 +1,21 @@
 # Production-oriented overrides (use with: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d)
 # Requires Docker Compose >= 2.24 for the !reset / !override tags, which drop
 # dev-only ports and source bind-mounts instead of merging with them.
+# Every service has a memory and CPU cap (overridable in .env), so a runaway
+# process cannot starve Postgres or the judge. CPU caps default to at most 1,
+# since Docker refuses a cap above the host's cores; raise *_CPUS on bigger hosts. Sandboxes are capped separately
+# (1 CPU and the problem's memory each): keep JUDGE_CONCURRENCY +
+# JUDGE_PREVIEW_CONCURRENCY below the host's cores.
 services:
   db:
+    mem_limit: ${DB_MEM_LIMIT:-1g}
+    cpus: ${DB_CPUS:-1}
     ports: !reset []
     restart: unless-stopped
 
   redis:
+    mem_limit: ${REDIS_MEM_LIMIT:-256m}
+    cpus: ${REDIS_CPUS:-0.5}
     ports: !reset []
     restart: unless-stopped
     # Persist the queue: without it, recreating Redis drops queued judging
@@ -16,6 +25,8 @@ services:
       - redis_data:/data
 
   backend:
+    mem_limit: ${BACKEND_MEM_LIMIT:-1g}
+    cpus: ${BACKEND_CPUS:-1}
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py collectstatic --noinput &&
@@ -37,6 +48,8 @@ services:
     ports: !reset []
 
   worker:
+    mem_limit: ${WORKER_MEM_LIMIT:-512m}
+    cpus: ${WORKER_CPUS:-1}
     restart: unless-stopped
     # -B: embedded beat for the recovery sweep (one judge worker only).
     command: celery -A config worker -B --schedule /tmp/celerybeat-schedule -Q judge,celery --loglevel=info --concurrency=${JUDGE_CONCURRENCY:-4} -n judge@%h
@@ -47,6 +60,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
   worker-preview:
+    mem_limit: ${PREVIEW_WORKER_MEM_LIMIT:-384m}
+    cpus: ${PREVIEW_WORKER_CPUS:-0.5}
     restart: unless-stopped
     command: celery -A config worker -Q preview --loglevel=info --concurrency=${JUDGE_PREVIEW_CONCURRENCY:-2} -n preview@%h
     environment:
@@ -56,6 +71,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
 
   frontend:
+    mem_limit: ${FRONTEND_MEM_LIMIT:-512m}
+    cpus: ${FRONTEND_CPUS:-1}
     build:
       context: ./frontend
       target: runner
@@ -75,6 +92,8 @@ services:
   # Nightly compressed pg_dump into ./backups, keeping BACKUP_KEEP_DAYS days.
   # Restore steps: docs/BACKUPS.md. Copy ./backups off this machine too.
   db-backup:
+    mem_limit: ${BACKUP_MEM_LIMIT:-256m}
+    cpus: ${BACKUP_CPUS:-0.5}
     image: postgres:16-alpine
     restart: unless-stopped
     logging:
@@ -110,6 +129,8 @@ services:
         condition: service_healthy
 
   caddy:
+    mem_limit: ${CADDY_MEM_LIMIT:-256m}
+    cpus: ${CADDY_CPUS:-0.5}
     image: caddy:2-alpine
     logging:
       driver: json-file

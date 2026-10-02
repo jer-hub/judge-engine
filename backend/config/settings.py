@@ -20,7 +20,9 @@ env = environ.Env(
     JUDGE_SOURCE_MAX_BYTES=(int, 65536),
     JUDGE_STDIN_MAX_BYTES=(int, 16384),
     JUDGE_OUTPUT_MAX_BYTES=(int, 4 * 1024 * 1024),
-    JUDGE_IMAGE=(str, "eclipse-temurin:17-jdk-jammy"),
+    # Pinned by digest: a new upstream image can change javac/JVM behaviour
+    # (and so verdicts) mid-term, and a tag can be repointed. Bump on purpose.
+    JUDGE_IMAGE=(str, "eclipse-temurin:17-jdk-jammy@sha256:51d32af96fb8a13ffbc96c719d7b05447a04ca69f314627d64050a64ecd13057"),
     JUDGE_CONCURRENCY=(int, 4),
     JUDGE_STALE_SECONDS=(int, 900),
     JUDGE_TASK_SOFT_LIMIT_S=(int, 600),

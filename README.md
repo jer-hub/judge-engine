@@ -118,6 +118,7 @@ Caddy is the only public entry point and gets an HTTPS certificate for `SITE_ADD
 - [ ] `DJANGO_CSRF_TRUSTED_ORIGINS`: `https://` + the hostname (needed for the Django Admin login)
 - [ ] `BOOTSTRAP_ADMIN_PASSWORD`: your own strong password. The admin is created on first start; the dev default from this README is refused
 - [ ] `POSTGRES_PASSWORD`: change it from the dev default
+- [ ] `JUDGE_CONCURRENCY` + `JUDGE_PREVIEW_CONCURRENCY`: below the host's CPU cores (each sandbox gets 1 CPU); raise the `*_CPUS` / `*_MEM_LIMIT` caps in `docker-compose.prod.yml` on bigger hosts
 
 Backups run nightly into `./backups` (see [docs/BACKUPS.md](docs/BACKUPS.md)); copy them off the machine. Keep the `worker` service at one instance: it also runs the stuck-submission recovery sweep. See [SECURITY.md](SECURITY.md).
 

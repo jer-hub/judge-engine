@@ -282,6 +282,8 @@ Changes:
 - db and redis restart automatically; Redis persists its queue (AOF)
 - The admin is created on first start from `BOOTSTRAP_ADMIN_PASSWORD` (the published dev default is refused)
 - Nightly `pg_dump` backups into `./backups` (see `docs/BACKUPS.md`)
+- Every service has memory/CPU caps (`*_MEM_LIMIT`, `*_CPUS`; CPU caps default to ≤ 1 so small hosts start)
+- The judge image is pinned by digest (`JUDGE_IMAGE`), so verdict behaviour can't change mid-term; bump it on purpose
 
 **Secrets Management:**
 - Rotate `DJANGO_SECRET_KEY` before public deployment
