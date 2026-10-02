@@ -55,8 +55,7 @@ jobs:
           cache: pip
           cache-dependency-path: |
             backend/requirements.txt
-            backend/requirements.lock
-      - run: pip install -r requirements.txt -c requirements.lock
+      - run: pip install -r requirements.txt
       - name: Migrations are up to date
         run: python manage.py makemigrations --check --dry-run
       - name: Tests (Docker is mocked; no sandbox needed)
@@ -64,7 +63,7 @@ jobs:
       - name: Known vulnerabilities in pinned dependencies
         run: |
           pip install pip-audit
-          pip-audit -r requirements.lock
+          pip-audit -r requirements.txt
 
   frontend:
     name: Frontend lint, types, build

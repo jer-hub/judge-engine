@@ -5,6 +5,9 @@ updates:
   - package-ecosystem: pip
     directory: /backend
     schedule: { interval: weekly }
+    # requirements.txt is compiled from requirements.in (pip-tools): update the
+    # pins within the ranges only; widening a range is a deliberate edit.
+    versioning-strategy: lockfile-only
     groups:
       python: { patterns: ["*"] }
     # Framework majors are planned migrations, not weekly bumps.
