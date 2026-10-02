@@ -86,7 +86,13 @@ export function ContestResultsControls({ contest }: Props) {
             contest.is_frozen ? "bg-amber-900/50 text-amber-200" : "bg-slate-800 text-slate-300"
           }`}
         >
-          {contest.is_frozen ? "Frozen for students" : revealedAt ? "Revealed" : "Live"}
+          {contest.is_frozen
+            ? "Frozen for students"
+            : revealedAt
+              ? "Revealed"
+              : contest.status === "past"
+                ? "Final"
+                : "Live"}
         </span>
         {contest.is_frozen ? (
           <button

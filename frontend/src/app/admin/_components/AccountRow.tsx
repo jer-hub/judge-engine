@@ -11,6 +11,9 @@ type Props = {
   user: AdminUser;
   onResetPassword: (user: AdminUser) => void;
   onDelete: (user: AdminUser) => void;
+  /** The signed-in admin's own row: the server refuses disabling or
+   *  deleting yourself, so those actions are not offered. */
+  isSelf?: boolean;
 };
 
 type EditableFields = Pick<
@@ -25,7 +28,7 @@ function errorText(err: Error) {
 const inputClass = "w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs";
 
 /** One roster row: view, inline edit, enable/disable, reset, delete. */
-export function AccountRow({ user, onResetPassword, onDelete }: Props) {
+export function AccountRow({ user, onResetPassword, onDelete, isSelf = false }: Props) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<EditableFields>(user);
@@ -131,14 +134,16 @@ export function AccountRow({ user, onResetPassword, onDelete }: Props) {
             <button type="button" onClick={startEdit} className="cursor-pointer text-emerald-300 hover:underline">
               Edit
             </button>
-            <button
-              type="button"
-              onClick={() => patch.mutate({ is_active: !user.is_active })}
-              disabled={patch.isPending}
-              className="cursor-pointer text-amber-300 hover:underline disabled:opacity-50"
-            >
-              {user.is_active ? "Disable" : "Enable"}
-            </button>
+            {!isSelf && (
+              <button
+                type="button"
+                onClick={() => patch.mutate({ is_active: !user.is_active })}
+                disabled={patch.isPending}
+                className="cursor-pointer text-amber-300 hover:underline disabled:opacity-50"
+              >
+                {user.is_active ? "Disable" : "Enable"}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onResetPassword(user)}
@@ -146,13 +151,15 @@ export function AccountRow({ user, onResetPassword, onDelete }: Props) {
             >
               Reset password
             </button>
-            <button
-              type="button"
-              onClick={() => onDelete(user)}
-              className="cursor-pointer text-red-300 hover:text-red-200"
-            >
-              Delete
-            </button>
+            {!isSelf && (
+              <button
+                type="button"
+                onClick={() => onDelete(user)}
+                className="cursor-pointer text-red-300 hover:text-red-200"
+              >
+                Delete
+              </button>
+            )}
           </>
         )}
       </td>

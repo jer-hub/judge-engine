@@ -103,6 +103,13 @@ export default function ContestDetailPage() {
                 </td>
               </tr>
             )}
+            {data.problems.length === 0 && data.status !== "upcoming" && (
+              <tr className="border-t border-slate-800">
+                <td colSpan={3} className="px-4 py-6 text-center text-slate-400">
+                  This contest has no problems.
+                </td>
+              </tr>
+            )}
             {data.problems.map((cp) => (
               <tr key={cp.id} className="border-t border-slate-800">
                 <td className="px-4 py-3 font-mono text-emerald-300">{cp.letter}</td>

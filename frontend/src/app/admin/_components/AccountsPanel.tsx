@@ -10,7 +10,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { formatApiErrorPayload } from "@/lib/admin";
 import { ApiError, apiFetch } from "@/lib/api";
 import { buildListQuery } from "@/lib/pagination";
-import type { AdminUser, Paginated } from "@/lib/types";
+import type { AdminUser, Paginated, User } from "@/lib/types";
 
 import { AccountRow } from "./AccountRow";
 import { AccountsImport } from "./AccountsImport";
@@ -38,6 +38,12 @@ export function AccountsPanel() {
     school_id: "",
     class_section: "",
     email: "",
+  });
+
+  const { data: me } = useQuery({
+    queryKey: ["me"],
+    queryFn: () => apiFetch<User>("/auth/me/"),
+    retry: false,
   });
 
   useEffect(() => {
@@ -336,6 +342,7 @@ export function AccountsPanel() {
                     setNewPassword("");
                   }}
                   onDelete={setDeleteFor}
+                  isSelf={me?.id === u.id}
                 />
               ))}
             </tbody>
