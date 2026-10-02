@@ -105,21 +105,26 @@ cd backend
 python manage.py test
 ```
 
-Coverage:
+Known vulnerabilities in the pinned dependencies (CI runs this too):
 
 ```bash
-docker compose exec backend coverage run --source='.' manage.py test
-docker compose exec backend coverage report
+docker compose exec backend sh -c "pip install -q pip-audit && pip-audit -r requirements.lock"
 ```
 
 ### Frontend Tests
 
-There is no dedicated frontend unit-test script yet. Prefer TypeScript checks and the [DEMO.md](DEMO.md) smoke flow:
+Vitest covers the security-critical helpers: the API proxy client, the
+cross-origin guard, token refresh and cookie flags, and the auth middleware.
 
 ```bash
 cd frontend
+npm test            # vitest run
 npx tsc --noEmit
+npm run lint
+npm audit --audit-level=high
 ```
+
+For the UI itself, follow the [DEMO.md](DEMO.md) smoke flow.
 
 ## Submission Process
 
