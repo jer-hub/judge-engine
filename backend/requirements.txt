@@ -9,6 +9,5 @@ redis>=5.0,<6
 docker>=7.1,<8
 gunicorn>=23.0,<24
 whitenoise>=6.7,<7
-Pillow>=10.4,<12
 markdown>=3.7,<4
 bleach>=6.1,<7
