@@ -1,9 +1,17 @@
 import socket
 from unittest.mock import MagicMock, patch
 
+import docker
 from django.test import SimpleTestCase
 
-from judge.executor import JudgeExecutor, _OutputPump, _process_runtime_ms
+from judge.executor import (
+    JudgeExecutor,
+    RunResult,
+    SandboxError,
+    _java_run_command,
+    _OutputPump,
+    _process_runtime_ms,
+)
 
 
 def _frame(stream: int, payload: bytes) -> bytes:
@@ -138,6 +146,54 @@ class ExecutorLimitsTests(SimpleTestCase):
         raw = MagicMock()
         executor._feed_stdin(raw, "data")
         raw.shutdown.assert_called_once_with(socket.SHUT_WR)
+
+    @patch("judge.executor.docker.from_env")
+    def test_docker_error_raises_sandbox_error_not_a_verdict(self, mocked_from_env):
+        executor, api = self._executor(mocked_from_env)
+        api.start.side_effect = docker.errors.APIError("daemon unavailable")
+        with self.assertRaises(SandboxError):
+            self._run(executor)
+        # The container is still cleaned up.
+        api.remove_container.assert_called_once_with("abc", force=True)
+
+    @patch("judge.executor.docker.from_env")
+    def test_containers_are_labelled_for_orphan_cleanup(self, mocked_from_env):
+        executor, api = self._executor(mocked_from_env)
+        self._run(executor)
+        labels = api.create_container_config.call_args.kwargs["labels"]
+        self.assertEqual(labels, {"judge-engine": "sandbox"})
+
+    @patch("judge.executor.docker.from_env")
+    def test_java_out_of_memory_is_mle(self, mocked_from_env):
+        executor, _ = self._executor(mocked_from_env)
+        run = RunResult(
+            verdict="OK", stdout="", execution_time_ms=300, exit_code=1,
+            stderr='Exception in thread "main" java.lang.OutOfMemoryError: Java heap space',
+        )
+        self.assertEqual(executor._classify_run(run, "x"), "MemoryLimitExceeded")
+        # GC thrashing pushed it past the time limit before the OOM: still MLE.
+        slow_oom = RunResult(
+            verdict="OK", stdout="", execution_time_ms=4800, exit_code=1, timed_out=True,
+            stderr="java.lang.OutOfMemoryError: Java heap space",
+        )
+        self.assertEqual(executor._classify_run(slow_oom, "x"), "MemoryLimitExceeded")
+        wall_killed = RunResult(
+            verdict="TimeLimitExceeded", stdout="", stderr="", execution_time_ms=6000,
+            exit_code=None, timed_out=True,
+        )
+        self.assertEqual(executor._classify_run(wall_killed, "x"), "TimeLimitExceeded")
+        crashed = RunResult(
+            verdict="OK", stdout="", execution_time_ms=300, exit_code=1,
+            stderr="java.lang.NullPointerException",
+        )
+        self.assertEqual(executor._classify_run(crashed, "x"), "RuntimeError")
+
+    def test_run_command_sizes_stack_and_heap(self):
+        cmd = _java_run_command(256)
+        self.assertEqual(cmd[0], "java")
+        self.assertIn("-Xmx192m", cmd)
+        self.assertIn("-Xss64m", cmd)
+        self.assertEqual(cmd[-1], "Solution")
 
 
 class OutputPumpTests(SimpleTestCase):

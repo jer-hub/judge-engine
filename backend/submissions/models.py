@@ -15,6 +15,9 @@ class Submission(models.Model):
         MEMORY_LIMIT_EXCEEDED = "MemoryLimitExceeded", "Memory Limit Exceeded"
         RUNTIME_ERROR = "RuntimeError", "Runtime Error"
         COMPILE_ERROR = "CompileError", "Compile Error"
+        # The judge infrastructure failed, not the student's code: no penalty,
+        # and the recovery sweep re-judges it automatically.
+        SYSTEM_ERROR = "SystemError", "System Error"
 
     class Language(models.TextChoices):
         JAVA = "java", "Java"
@@ -51,6 +54,15 @@ class Submission(models.Model):
     compile_error = models.TextField(blank=True, default="")
     submitted_at = models.DateTimeField(auto_now_add=True, db_index=True)
     judged_at = models.DateTimeField(null=True, blank=True)
+    # Set when a task claims the submission; only the task holding the current
+    # claim may write results, so a stale or duplicate task cannot overwrite.
+    judge_claim = models.UUIDField(null=True, blank=True, editable=False)
+    judging_started_at = models.DateTimeField(null=True, blank=True, editable=False)
+    # Last hand-off to the queue; the sweep re-queues Pending ones gone stale.
+    enqueued_at = models.DateTimeField(null=True, blank=True, editable=False)
+    # Automatic re-judges after SystemError; capped so a broken problem cannot
+    # loop forever. Reset by a manual rejudge.
+    auto_rejudges = models.PositiveSmallIntegerField(default=0, editable=False)
 
     class Meta:
         ordering = ["-submitted_at"]

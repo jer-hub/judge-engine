@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import socket
 import threading
@@ -19,6 +20,32 @@ from docker.types import LogConfig
 logger = logging.getLogger("judge")
 
 OUTPUT_LIMIT_MESSAGE = "Output limit exceeded."
+
+# Every sandbox container carries this label so the recovery sweep can find
+# ones orphaned by a worker crash.
+SANDBOX_LABEL = "judge-engine"
+SANDBOX_LABEL_VALUE = "sandbox"
+
+
+class SandboxError(Exception):
+    """The sandbox itself failed (Docker error), not the student's program.
+
+    Raised instead of returning a verdict so the task can retry and, if the
+    failure persists, record SystemError rather than charging the student.
+    """
+
+
+def _java_run_command(memory_limit_mb: int) -> list[str]:
+    jvm_heap = max(memory_limit_mb - 64, 32)
+    # -Xss: recursive DFS on ~1e5 nodes must not overflow the default 1 MB
+    # stack. Serial GC: no GC threads competing for the single CPU and pids cap.
+    return ["java", f"-Xmx{jvm_heap}m", "-Xss64m", "-XX:+UseSerialGC", "Solution"]
+
+
+def _is_java_oom(run: "RunResult") -> bool:
+    # The heap cap (-Xmx) sits below the container limit, so the JVM usually
+    # dies with its own OutOfMemoryError before Docker's OOM killer fires.
+    return run.exit_code not in (0, None) and "java.lang.OutOfMemoryError" in run.stderr
 
 
 @dataclass(frozen=True)
@@ -43,6 +70,32 @@ class JudgeExecutor:
         self.host_data_dir = os.environ.get(
             "JUDGE_HOST_DATA_DIR", str(self.data_dir)
         )
+
+    def cleanup_orphans(self, older_than: datetime) -> int:
+        """Remove sandbox containers and workspaces left behind by a crashed
+        worker. Live runs are never older than a few wall-time limits, far
+        below the stale window the sweep passes in."""
+        cutoff = older_than.timestamp()
+        removed = 0
+        for container in self.client.api.containers(
+            all=True, filters={"label": f"{SANDBOX_LABEL}={SANDBOX_LABEL_VALUE}"}
+        ):
+            if container.get("Created", cutoff) < cutoff:
+                try:
+                    self.client.api.remove_container(container["Id"], force=True)
+                    removed += 1
+                except docker.errors.APIError:
+                    logger.warning("Could not remove orphan container %s", container["Id"])
+        if self.data_dir.is_dir():
+            for entry in self.data_dir.iterdir():
+                if (
+                    entry.is_dir()
+                    and re.fullmatch(r"[0-9a-f]{32}", entry.name)
+                    and entry.stat().st_mtime < cutoff
+                ):
+                    shutil.rmtree(entry, ignore_errors=True)
+                    removed += 1
+        return removed
 
     def ensure_image(self) -> None:
         try:
@@ -83,6 +136,8 @@ class JudgeExecutor:
                     "compile_error": "Compilation timed out.",
                     "results": [],
                 }
+            if compile_result.exit_code is None:
+                raise SandboxError("Compiler container exited without a status")
             if compile_result.exit_code not in (0,):
                 err = (compile_result.stderr or compile_result.stdout).strip()
                 return {
@@ -104,11 +159,10 @@ class JudgeExecutor:
                     (time_limit_ms / 1000.0) * settings.JUDGE_WALL_TIMEOUT_MULTIPLIER,
                     2.0,
                 )
-                jvm_heap = max(memory_limit_mb - 64, 32)
                 # Feed stdin — never write hidden inputs into the bind-mounted workspace
                 run = self._run_container(
                     host_workspace=host_workspace,
-                    command=["java", f"-Xmx{jvm_heap}m", "Solution"],
+                    command=_java_run_command(memory_limit_mb),
                     time_limit_s=wall,
                     memory_limit_mb=memory_limit_mb,
                     stdin_data=tc["input_data"],
@@ -178,6 +232,8 @@ class JudgeExecutor:
                     "stderr": "",
                     "execution_time_ms": None,
                 }
+            if compile_result.exit_code is None:
+                raise SandboxError("Compiler container exited without a status")
             if compile_result.exit_code not in (0,):
                 err = (compile_result.stderr or compile_result.stdout).strip()
                 return {
@@ -197,11 +253,10 @@ class JudgeExecutor:
                 (time_limit_ms / 1000.0) * settings.JUDGE_WALL_TIMEOUT_MULTIPLIER,
                 2.0,
             )
-            jvm_heap = max(memory_limit_mb - 64, 32)
             # No shell: argv + stdin socket (same path as official judging).
             run = self._run_container(
                 host_workspace=host_workspace,
-                command=["java", f"-Xmx{jvm_heap}m", "Solution"],
+                command=_java_run_command(memory_limit_mb),
                 time_limit_s=wall,
                 memory_limit_mb=memory_limit_mb,
                 stdin_data=stdin if stdin is not None else "",
@@ -209,10 +264,12 @@ class JudgeExecutor:
                 time_limit_ms=time_limit_ms,
             )
 
-            if run.timed_out:
-                status = "TimeLimitExceeded"
-            elif run.oom_killed:
+            # Memory first: a JVM thrashing GC near its heap cap often runs
+            # past the time limit before dying of OutOfMemoryError.
+            if run.oom_killed or _is_java_oom(run):
                 status = "MemoryLimitExceeded"
+            elif run.timed_out:
+                status = "TimeLimitExceeded"
             elif run.output_limit_exceeded:
                 status = "OutputLimitExceeded"
             elif run.exit_code not in (0,):
@@ -286,6 +343,7 @@ class JudgeExecutor:
                 tty=False,
                 detach=True,
                 host_config=host_config,
+                labels={SANDBOX_LABEL: SANDBOX_LABEL_VALUE},
             )
             # Without StdinOnce Docker never closes the process's stdin when we
             # half-close, so EOF-driven readers (Scanner.hasNext) hang until TLE.
@@ -375,13 +433,7 @@ class JudgeExecutor:
             )
         except docker.errors.APIError as exc:
             logger.exception("Docker API error: %s", exc)
-            return RunResult(
-                verdict="RuntimeError",
-                stdout="",
-                stderr="Internal sandbox error",
-                execution_time_ms=None,
-                exit_code=None,
-            )
+            raise SandboxError(str(exc)) from exc
         finally:
             if sock is not None:
                 try:
@@ -408,12 +460,13 @@ class JudgeExecutor:
             logger.debug("stdin closed early by sandboxed process", exc_info=True)
 
     def _classify_run(self, run: RunResult, expected_output: str) -> str:
+        # Memory first: a JVM thrashing GC near its heap cap often runs past
+        # the time limit before dying of OutOfMemoryError. A run killed by the
+        # wall timer has no exit code, so it stays TimeLimitExceeded.
+        if run.oom_killed or _is_java_oom(run):
+            return "MemoryLimitExceeded"
         if run.timed_out:
             return "TimeLimitExceeded"
-        if run.oom_killed:
-            return "MemoryLimitExceeded"
-        if run.verdict == "RuntimeError":
-            return "RuntimeError"
         if run.output_limit_exceeded:
             # No dedicated verdict in the model; oversized output is never correct.
             return "WrongAnswer"

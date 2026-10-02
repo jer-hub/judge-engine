@@ -26,7 +26,8 @@ services:
 
   worker:
     restart: unless-stopped
-    command: celery -A config worker -Q judge,celery --loglevel=info --concurrency=${JUDGE_CONCURRENCY:-4} -n judge@%h
+    # -B: embedded beat for the recovery sweep (one judge worker only).
+    command: celery -A config worker -B --schedule /tmp/celerybeat-schedule -Q judge,celery --loglevel=info --concurrency=${JUDGE_CONCURRENCY:-4} -n judge@%h
     environment:
       DJANGO_DEBUG: "False"
     volumes: !override

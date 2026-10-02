@@ -5,7 +5,9 @@ max(memory_limit_mb - 64, 32). Values below 96 MB give the JVM a heap
 larger than the container mem_limit and guarantee OOM kills.
 """
 
-MIN_TIME_LIMIT_MS = 100
+# The measured time includes JVM startup (~0.3-0.5 s), so tighter limits
+# would reject correct solutions.
+MIN_TIME_LIMIT_MS = 1000
 MAX_TIME_LIMIT_MS = 30_000
 
 MIN_MEMORY_LIMIT_MB = 96

@@ -138,7 +138,7 @@ export function ProblemEditForm({ slug, onClose }: Props) {
         <span className="mb-1 block text-slate-400">Time (ms)</span>
         <input
           type="number"
-          min={100}
+          min={1000}
           max={30000}
           className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
           value={form.time_limit_ms}

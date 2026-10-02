@@ -85,7 +85,9 @@ services:
     logging: *default-logging
     # Root: needs the Docker socket (root-equivalent regardless of the user).
     user: "0"
-    command: celery -A config worker -Q judge,celery --loglevel=info --concurrency=2 -n judge@%h
+    # -B: embedded beat runs the stuck-submission recovery sweep every minute.
+    # Only one judge worker may run it, so do not scale this service.
+    command: celery -A config worker -B --schedule /tmp/celerybeat-schedule -Q judge,celery --loglevel=info --concurrency=2 -n judge@%h
     env_file:
       - .env
     environment:

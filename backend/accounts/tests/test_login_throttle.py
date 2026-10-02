@@ -35,3 +35,12 @@ class LoginThrottleTests(APITestCase):
         self.assertEqual(codes[5], 429)
         # Another account from a fresh IP is unaffected.
         self.assertEqual(self._login("bob", "10.0.2.1").status_code, 401)
+
+    def test_successful_logins_do_not_count_toward_the_username_cap(self):
+        # A student re-signing in on several lab PCs is never locked out.
+        for i in range(1, 9):
+            resp = self._login("alice", f"10.0.3.{i}", password="pass12345")
+            self.assertEqual(resp.status_code, 200, f"login {i}")
+        # Failures still count after them.
+        codes = [self._login("alice", f"10.0.4.{i}").status_code for i in range(1, 7)]
+        self.assertEqual(codes, [401] * 5 + [429])
