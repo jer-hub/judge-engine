@@ -49,11 +49,21 @@ export default function ScoreboardPage() {
             <p className="text-sm text-amber-300">Connection lost — showing the last standings, retrying…</p>
           )}
         </div>
-        {data.is_frozen && (
+        {data.freeze_at && !data.is_frozen && data.status === "active" && (
+          <span className="rounded bg-slate-800 px-3 py-1 text-sm text-slate-300">
+            Freezes at {new Date(data.freeze_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        )}
+        {data.is_frozen && data.freeze_at && data.status !== "past" && (
           <span className="rounded bg-amber-900/50 px-3 py-1 text-sm text-amber-200">
-            {data.status === "past"
-              ? "Results held: final standings will be revealed by your teacher"
-              : "Scoreboard frozen"}
+            Frozen since{" "}
+            {new Date(data.freeze_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            : new results are hidden
+          </span>
+        )}
+        {data.is_frozen && data.status === "past" && (
+          <span className="rounded bg-amber-900/50 px-3 py-1 text-sm text-amber-200">
+            Results held: final standings will be revealed by your teacher
           </span>
         )}
       </div>
@@ -63,7 +73,7 @@ export default function ScoreboardPage() {
           <thead className="bg-slate-900 text-slate-400">
             <tr>
               <th className="px-3 py-2">Rank</th>
-              <th className="px-3 py-2">Team</th>
+              <th className="px-3 py-2">Student</th>
               <th className="px-3 py-2">Solved</th>
               <th className="px-3 py-2">Penalty</th>
               {data.problems.map((p) => (
@@ -111,6 +121,26 @@ export default function ScoreboardPage() {
           </tbody>
         </table>
       </div>
+
+      <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-xs text-slate-400">
+        <div>
+          <dt className="inline font-mono text-emerald-300">+2 (34)</dt>
+          <dd className="inline"> solved on the 2nd try, at minute 34</dd>
+        </div>
+        <div>
+          <dt className="inline font-mono text-red-300">-3</dt>
+          <dd className="inline"> 3 wrong tries, not solved</dd>
+        </div>
+        <div>
+          <dt className="inline font-mono text-amber-300">?</dt>
+          <dd className="inline"> judging, or hidden by the freeze</dd>
+        </div>
+        <div>
+          <dd className="inline">
+            Penalty: minutes to each solve + 20 per wrong try before it. Compile errors are free.
+          </dd>
+        </div>
+      </dl>
     </div>
   );
 }

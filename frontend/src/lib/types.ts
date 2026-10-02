@@ -19,6 +19,8 @@ export type ProblemListItem = {
   time_limit_ms: number;
   memory_limit_mb: number;
   is_published: boolean;
+  /** The viewer's own progress (list endpoint only). */
+  my_progress?: "solved" | "attempted" | null;
   test_case_count?: number;
   run_all_tests?: boolean;
   created_by_username?: string | null;

@@ -50,6 +50,7 @@ class TestCaseSerializer(serializers.ModelSerializer):
 
 class ProblemListSerializer(serializers.ModelSerializer):
     tags = serializers.SerializerMethodField()
+    my_progress = serializers.SerializerMethodField()
 
     class Meta:
         model = Problem
@@ -62,10 +63,19 @@ class ProblemListSerializer(serializers.ModelSerializer):
             "time_limit_ms",
             "memory_limit_mb",
             "is_published",
+            "my_progress",
         )
 
     def get_tags(self, obj: Problem) -> list[str]:
         return obj.tag_list
+
+    def get_my_progress(self, obj: Problem) -> str | None:
+        """The viewer's progress, "solved", "attempted" or None (list annotations)."""
+        if getattr(obj, "my_solved", False):
+            return "solved"
+        if getattr(obj, "my_attempted", False):
+            return "attempted"
+        return None
 
 
 class ProblemAdminListSerializer(ProblemListSerializer):

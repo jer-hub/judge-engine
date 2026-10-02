@@ -1,4 +1,4 @@
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from rest_framework import status, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -39,6 +39,14 @@ class ProblemViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(Q(is_published=True) | unpublished_contest_problem_q(user))
             else:
                 qs = qs.filter(is_published=True)
+
+        if self.action == "list":
+            # The viewer's own progress, for solved/attempted markers.
+            mine = Submission.objects.filter(problem=OuterRef("pk"), user=user)
+            qs = qs.annotate(
+                my_solved=Exists(mine.filter(status=Submission.Status.ACCEPTED)),
+                my_attempted=Exists(mine),
+            )
 
         difficulty = self.request.query_params.get("difficulty")
         if difficulty:

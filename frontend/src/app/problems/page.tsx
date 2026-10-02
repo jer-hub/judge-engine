@@ -109,6 +109,9 @@ export default function ProblemsPage() {
             <table className="w-full min-w-[560px] text-left text-sm">
               <thead className="bg-slate-900 text-slate-400">
                 <tr>
+                  <th className="w-8 px-4 py-3">
+                    <span className="sr-only">Your progress</span>
+                  </th>
                   <th className="px-4 py-3">Title</th>
                   <th className="px-4 py-3">Difficulty</th>
                   <th className="px-4 py-3">Limits</th>
@@ -118,6 +121,17 @@ export default function ProblemsPage() {
               <tbody>
                 {rows.map((p) => (
                   <tr key={p.id} className="border-t border-slate-800 hover:bg-slate-900/40">
+                    <td className="px-4 py-3 text-center">
+                      {p.my_progress === "solved" ? (
+                        <span className="text-emerald-400" title="Solved">
+                          ✓<span className="sr-only">Solved</span>
+                        </span>
+                      ) : p.my_progress === "attempted" ? (
+                        <span className="text-amber-400" title="Attempted, not solved yet">
+                          •<span className="sr-only">Attempted</span>
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3">
                       <Link
                         href={`/problems/${p.slug}`}
