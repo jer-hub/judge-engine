@@ -93,6 +93,7 @@ class ContestDetailSerializer(serializers.ModelSerializer):
             "freeze_scoreboard_minutes_before_end",
             "hold_results_until_revealed",
             "results_revealed_at",
+            "practice_after_end",
             "problems",
             "participants",
             "is_registered",
@@ -184,6 +185,7 @@ class ContestWriteSerializer(serializers.ModelSerializer):
             "is_public",
             "freeze_scoreboard_minutes_before_end",
             "hold_results_until_revealed",
+            "practice_after_end",
             "problems",
             "participant_usernames",
         )

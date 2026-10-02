@@ -23,6 +23,10 @@ class Contest(models.Model):
     )
     # Set by "Reveal final standings": the freeze ends from this moment on.
     results_revealed_at = models.DateTimeField(null=True, blank=True)
+    practice_after_end = models.BooleanField(
+        default=False,
+        help_text="After the contest, anyone who could see it may practice its problems.",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

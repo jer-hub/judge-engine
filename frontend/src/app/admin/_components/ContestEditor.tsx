@@ -82,6 +82,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
   const [isPublic, setIsPublic] = useState(true);
   const [freeze, setFreeze] = useState(0);
   const [holdResults, setHoldResults] = useState(false);
+  const [practiceAfterEnd, setPracticeAfterEnd] = useState(false);
   const [problems, setProblems] = useState<ProblemRow[]>([]);
   const [participantSet, setParticipantSet] = useState<string[]>([]);
   const [rosterSearch, setRosterSearch] = useState("");
@@ -120,6 +121,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
     setIsPublic(c.is_public);
     setFreeze(c.freeze_scoreboard_minutes_before_end);
     setHoldResults(c.hold_results_until_revealed);
+    setPracticeAfterEnd(c.practice_after_end);
     setProblems(
       withLetters(
         c.problems.map((p) => ({
@@ -214,6 +216,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
           is_public: isPublic,
           freeze_scoreboard_minutes_before_end: freeze,
           hold_results_until_revealed: holdResults,
+          practice_after_end: practiceAfterEnd,
           problems: withLetters(problems),
           participant_usernames: participantSet,
         }),
@@ -552,6 +555,24 @@ export function ContestEditor({ contestId, onClose }: Props) {
           <span className="text-xs text-slate-500">
             For an announcement, or while students with extra time are still working. Reveal
             below.
+          </span>
+        </label>
+        <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+          <span className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={practiceAfterEnd}
+              onChange={(e) => {
+                markDirty();
+                setPracticeAfterEnd(e.target.checked);
+              }}
+              className="cursor-pointer"
+            />
+            <span>Open its problems for practice after the contest</span>
+          </span>
+          <span className="text-xs text-slate-500">
+            Leave off if you will reuse these problems. Practice stays closed while any contest
+            using them is still running.
           </span>
         </label>
       </div>
