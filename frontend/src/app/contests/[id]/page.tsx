@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { ContestClarifications } from "@/components/ContestClarifications";
 import { Countdown } from "@/components/Countdown";
 import { apiFetch } from "@/lib/api";
 import type { ContestDetail } from "@/lib/types";
@@ -131,6 +132,14 @@ export default function ContestDetailPage() {
           </tbody>
         </table>
       </div>
+
+      {data.my_status !== "upcoming" && (
+        <ContestClarifications
+          contestId={data.id}
+          problemLetters={data.problems.map((p) => p.letter)}
+          canAsk={canSubmit}
+        />
+      )}
     </div>
   );
 }

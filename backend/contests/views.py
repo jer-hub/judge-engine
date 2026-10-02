@@ -1,5 +1,6 @@
 from django.db.models import Q
 from django.http import HttpResponse
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.text import slugify
 from rest_framework import status, viewsets
@@ -11,7 +12,8 @@ from rest_framework.response import Response
 from accounts.permissions import IsAdmin
 
 from .export import standings_csv
-from .models import Contest, ContestParticipant
+from . import clarifications as clar
+from .models import Clarification, Contest, ContestParticipant
 from .scoreboard import build_scoreboard, invalidate_scoreboard_cache
 from .serializers import (
     ContestDetailSerializer,
@@ -52,7 +54,7 @@ class ContestViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in (
             "create", "update", "partial_update", "destroy",
-            "reveal", "extensions", "standings_export",
+            "reveal", "extensions", "standings_export", "answer_clarification",
         ):
             return [IsAuthenticated(), IsAdmin()]
         return [IsAuthenticated()]
@@ -74,6 +76,39 @@ class ContestViewSet(viewsets.ModelViewSet):
             {"registered": True, "created": created},
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+    @action(detail=True, methods=["get", "post"], url_path="clarifications")
+    def clarifications(self, request, pk=None):
+        """GET: what the viewer may see. POST: a student asks a question
+        ({"question", "problem_letter"?}); an admin posts an announcement
+        ({"answer"})."""
+        contest = self.get_object()
+        if request.method == "POST":
+            if getattr(request.user, "is_platform_admin", False):
+                item = clar.announce(contest, request.user, request.data)
+            else:
+                item = clar.ask_question(contest, request.user, request.data)
+            return Response(
+                clar.ClarificationSerializer(item, context={"request": request}).data,
+                status=status.HTTP_201_CREATED,
+            )
+        items = clar.visible_clarifications(contest, request.user)
+        return Response(
+            clar.ClarificationSerializer(items, many=True, context={"request": request}).data
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path=r"clarifications/(?P<clarification_id>\d+)/answer",
+    )
+    def answer_clarification(self, request, pk=None, clarification_id=None):
+        """Admin: answer a question ({"answer", "is_public"}); is_public shows
+        it to every contestant."""
+        contest = self.get_object()
+        item = get_object_or_404(Clarification, pk=clarification_id, contest=contest)
+        item = clar.answer(item, request.user, request.data)
+        return Response(clar.ClarificationSerializer(item, context={"request": request}).data)
 
     @action(detail=True, methods=["post"], url_path="reveal")
     def reveal(self, request, pk=None):

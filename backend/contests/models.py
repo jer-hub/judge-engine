@@ -133,3 +133,51 @@ class ContestParticipant(models.Model):
 
     def __str__(self) -> str:
         return f"{self.user.username} @ {self.contest.title}"
+
+
+class Clarification(models.Model):
+    """A student's question during a contest, or an admin announcement.
+
+    Announcements have no author question: an admin posts the text as the
+    answer, public. A student's question stays private to them and admins
+    until answered with is_public, which shows it to every contestant.
+    """
+
+    contest = models.ForeignKey(
+        Contest, on_delete=models.CASCADE, related_name="clarifications"
+    )
+    problem = models.ForeignKey(
+        ContestProblem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="clarifications",
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="clarifications_asked",
+    )
+    question = models.TextField(blank=True, default="")
+    answer = models.TextField(blank=True, default="")
+    is_public = models.BooleanField(default=False)
+    answered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="clarifications_answered",
+    )
+    answered_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["contest", "created_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.contest.title}: {(self.question or self.answer)[:40]}"
+
+    @property
+    def is_announcement(self) -> bool:
+        return not self.question

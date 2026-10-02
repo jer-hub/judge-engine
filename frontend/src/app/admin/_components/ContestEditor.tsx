@@ -12,6 +12,7 @@ import {
 } from "@/lib/admin";
 import { ApiError, apiFetch } from "@/lib/api";
 
+import { AdminClarifications } from "./AdminClarifications";
 import { ContestResultsControls } from "./ContestResultsControls";
 import { fetchAllPages } from "@/lib/pagination";
 import type { AdminUser, ContestDetail, ProblemListItem } from "@/lib/types";
@@ -578,6 +579,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
       </div>
 
       {detail.data && <ContestResultsControls contest={detail.data} />}
+      {detail.data && <AdminClarifications contestId={detail.data.id} />}
 
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">

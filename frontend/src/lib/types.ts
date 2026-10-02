@@ -104,6 +104,20 @@ export type ContestDetail = ContestListItem & {
   }>;
 };
 
+export type Clarification = {
+  id: number;
+  problem_letter: string | null;
+  question: string;
+  answer: string;
+  is_public: boolean;
+  is_announcement: boolean;
+  mine: boolean;
+  /** Who asked: admins only. */
+  author: string | null;
+  created_at: string;
+  answered_at: string | null;
+};
+
 export type AdminUser = {
   id: number;
   username: string;
