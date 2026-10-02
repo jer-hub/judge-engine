@@ -15,6 +15,7 @@ from .export import standings_csv
 from . import clarifications as clar
 from .models import Clarification, Contest, ContestParticipant
 from .scoreboard import build_scoreboard, invalidate_scoreboard_cache
+from .similarity import contest_similarity
 from .serializers import (
     ContestDetailSerializer,
     ContestListSerializer,
@@ -55,6 +56,7 @@ class ContestViewSet(viewsets.ModelViewSet):
         if self.action in (
             "create", "update", "partial_update", "destroy",
             "reveal", "extensions", "standings_export", "answer_clarification",
+            "similarity",
         ):
             return [IsAuthenticated(), IsAdmin()]
         return [IsAuthenticated()]
@@ -109,6 +111,19 @@ class ContestViewSet(viewsets.ModelViewSet):
         item = get_object_or_404(Clarification, pk=clarification_id, contest=contest)
         item = clar.answer(item, request.user, request.data)
         return Response(clar.ClarificationSerializer(item, context={"request": request}).data)
+
+    @action(detail=True, methods=["get"], url_path="similarity")
+    def similarity(self, request, pk=None):
+        """Admin: pairs of students with suspiciously similar code per problem
+        (?threshold=0.6, from 0.3 to 1). A lead to review, not proof."""
+        contest = self.get_object()
+        try:
+            threshold = float(request.query_params.get("threshold", 0.6))
+        except ValueError:
+            raise ValidationError({"threshold": "Must be a number."}) from None
+        if not 0.3 <= threshold <= 1:
+            raise ValidationError({"threshold": "Must be between 0.3 and 1."})
+        return Response({"threshold": threshold, "pairs": contest_similarity(contest, threshold)})
 
     @action(detail=True, methods=["post"], url_path="reveal")
     def reveal(self, request, pk=None):
