@@ -9,7 +9,12 @@ import { EmptyState } from "@/components/EmptyState";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { Pagination } from "@/components/Pagination";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { djangoAdminUrl, formatApiErrorPayload } from "@/lib/admin";
+import {
+  bulkRejudge,
+  describeRejudge,
+  djangoAdminUrl,
+  formatApiErrorPayload,
+} from "@/lib/admin";
 import { ApiError, apiFetch } from "@/lib/api";
 import { buildListQuery } from "@/lib/pagination";
 import type { Paginated, ProblemListItem } from "@/lib/types";
@@ -58,8 +63,10 @@ export function ProblemsPanel() {
   const [confirm, setConfirm] = useState<
     | { type: "publish"; problem: AdminProblem; next: boolean }
     | { type: "delete"; problem: AdminProblem }
+    | { type: "rejudge"; problem: AdminProblem }
     | null
   >(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [form, setForm] = useState<CreateProblemBody>({
     title: "",
     slug: "",
@@ -104,6 +111,25 @@ export function ProblemsPanel() {
       setFormError(null);
     },
     onError: (err: Error) => {
+      setFormError(
+        err instanceof ApiError
+          ? formatApiErrorPayload(err.payload, err.message)
+          : err.message,
+      );
+      setConfirm(null);
+    },
+  });
+
+  const rejudgeMutation = useMutation({
+    mutationFn: (problemId: number) => bulkRejudge({ problem: problemId }),
+    onSuccess: (result) => {
+      setNotice(describeRejudge(result));
+      setFormError(null);
+      setConfirm(null);
+      void queryClient.invalidateQueries({ queryKey: ["admin", "submissions"] });
+    },
+    onError: (err: Error) => {
+      setNotice(null);
       setFormError(
         err instanceof ApiError
           ? formatApiErrorPayload(err.payload, err.message)
@@ -329,6 +355,7 @@ export function ProblemsPanel() {
       )}
 
       {formError && !formOpen && <p className="text-sm text-red-300">{formError}</p>}
+      {notice && <p className="text-sm text-emerald-300">{notice}</p>}
       {isLoading && <p className="text-sm text-slate-400">Loading problems…</p>}
       {error && <p className="text-sm text-red-300">{(error as Error).message}</p>}
 
@@ -427,6 +454,14 @@ export function ProblemsPanel() {
                       </a>
                       <button
                         type="button"
+                        disabled={rejudgeMutation.isPending}
+                        onClick={() => setConfirm({ type: "rejudge", problem: p })}
+                        className="cursor-pointer text-amber-300 transition hover:text-amber-200 disabled:opacity-50"
+                      >
+                        Rejudge
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setConfirm({ type: "delete", problem: p })}
                         className="cursor-pointer text-red-300 transition hover:text-red-200"
                       >
@@ -477,6 +512,22 @@ export function ProblemsPanel() {
             slug: confirm.problem.slug,
             is_published: confirm.next,
           });
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirm?.type === "rejudge"}
+        title="Rejudge all submissions?"
+        body={
+          confirm?.type === "rejudge"
+            ? `Re-judge every finished submission to “${confirm.problem.title}” against its current test cases, including contest submissions — scoreboards update with the new verdicts.`
+            : ""
+        }
+        confirmLabel="Rejudge"
+        onCancel={() => setConfirm(null)}
+        onConfirm={() => {
+          if (confirm?.type !== "rejudge") return;
+          rejudgeMutation.mutate(confirm.problem.id);
         }}
       />
 

@@ -1,5 +1,6 @@
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
@@ -7,7 +8,19 @@ from rest_framework.throttling import UserRateThrottle
 from accounts.permissions import IsAdmin
 
 from .models import Submission
+from .rejudge import queue_rejudge
 from .serializers import SubmissionCreateSerializer, SubmissionSerializer
+
+
+def _int_param(data, name: str) -> int | None:
+    """An optional integer id from query params or a body; 400 if malformed."""
+    value = data.get(name)
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise ValidationError({name: "Must be an integer id."}) from None
 
 
 class SubmissionRateThrottle(UserRateThrottle):
@@ -36,12 +49,12 @@ class SubmissionViewSet(
         if not getattr(user, "is_platform_admin", False):
             qs = qs.filter(user=user)
 
-        problem_id = self.request.query_params.get("problem")
-        if problem_id:
+        problem_id = _int_param(self.request.query_params, "problem")
+        if problem_id is not None:
             qs = qs.filter(problem_id=problem_id)
 
-        contest_id = self.request.query_params.get("contest")
-        if contest_id:
+        contest_id = _int_param(self.request.query_params, "contest")
+        if contest_id is not None:
             qs = qs.filter(contest_id=contest_id)
 
         me = self.request.query_params.get("user")
@@ -56,7 +69,7 @@ class SubmissionViewSet(
         return SubmissionSerializer
 
     def get_permissions(self):
-        if self.action == "rejudge":
+        if self.action in ("rejudge", "bulk_rejudge"):
             return [IsAuthenticated(), IsAdmin()]
         return [IsAuthenticated()]
 
@@ -87,24 +100,26 @@ class SubmissionViewSet(
                 {"detail": "Submission is already queued or being judged."},
                 status=status.HTTP_409_CONFLICT,
             )
-        submission.status = Submission.Status.PENDING
-        submission.compile_error = ""
-        submission.judged_at = None
-        # Dropping the claim makes any task still judging the old run discard
-        # its verdict instead of overwriting this one.
-        submission.judge_claim = None
-        submission.judging_started_at = None
-        submission.auto_rejudges = 0
-        submission.save(
-            update_fields=[
-                "status", "compile_error", "judged_at",
-                "judge_claim", "judging_started_at", "auto_rejudges",
-            ]
-        )
-        submission.results.all().delete()
-
-        from judge.tasks import enqueue_judging
-
-        enqueue_judging(submission.id)
+        queue_rejudge(Submission.objects.filter(pk=submission.pk), include_in_flight=True)
+        submission.refresh_from_db()
         output = SubmissionSerializer(submission, context={"request": request})
         return Response(output.data)
+
+    @action(detail=False, methods=["post"], url_path="bulk-rejudge")
+    def bulk_rejudge(self, request):
+        """Re-judge every finished submission to a problem and/or contest,
+        e.g. after its test cases were fixed. Pending/Judging ones are left
+        alone (they will use the current tests anyway)."""
+        problem_id = _int_param(request.data, "problem")
+        contest_id = _int_param(request.data, "contest")
+        if problem_id is None and contest_id is None:
+            raise ValidationError({"detail": "Give a problem, a contest, or both."})
+        scope = Submission.objects.all()
+        if problem_id is not None:
+            scope = scope.filter(problem_id=problem_id)
+        if contest_id is not None:
+            scope = scope.filter(contest_id=contest_id)
+        queued = queue_rejudge(scope)
+        return Response(
+            {"queued": len(queued), "skipped_in_flight": scope.count() - len(queued)}
+        )
