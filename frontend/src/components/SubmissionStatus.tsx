@@ -14,7 +14,7 @@ type Props = {
 };
 
 export function SubmissionStatus({ submissionId }: Props) {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["submission", submissionId],
     queryFn: () => apiFetch<Submission>(`/submissions/${submissionId}/`),
     enabled: !!submissionId,
@@ -30,6 +30,23 @@ export function SubmissionStatus({ submissionId }: Props) {
     return (
       <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4 text-sm text-slate-400">
         Submit a solution to see the verdict here.
+      </div>
+    );
+  }
+
+  if (!data && error && !isLoading) {
+    // Without this the panel said "Judging…" forever: polling only starts
+    // once a status is known.
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-red-900/60 bg-red-950/30 p-4 text-sm text-red-200">
+        <span>Couldn&apos;t load the verdict: {(error as Error).message}</span>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="rounded border border-red-800 px-3 py-1 transition hover:bg-red-900/40"
+        >
+          Retry
+        </button>
       </div>
     );
   }

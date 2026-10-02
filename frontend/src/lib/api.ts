@@ -21,6 +21,18 @@ async function parseJson(res: Response) {
   }
 }
 
+/**
+ * The session is gone (the proxy could not refresh it): send the user to log
+ * in and come back here, instead of every page showing a raw 401 message.
+ */
+function redirectToLogin() {
+  if (typeof window === "undefined") return;
+  const { pathname, search } = window.location;
+  // On /login itself a 401 is expected (the NavBar's "me" probe).
+  if (pathname === "/login") return;
+  window.location.assign(`/login?next=${encodeURIComponent(pathname + search)}`);
+}
+
 /** Browser-side API helper that goes through Next.js auth cookie proxy when needed. */
 export async function apiFetch<T>(
   path: string,
@@ -45,6 +57,7 @@ export async function apiFetch<T>(
   });
 
   const data = await parseJson(res);
+  if (res.status === 401) redirectToLogin();
   if (!res.ok) {
     let detail: string | null = null;
     if (data && typeof data === "object" && data !== null && "detail" in data) {

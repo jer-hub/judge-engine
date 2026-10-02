@@ -282,7 +282,9 @@ export function ContestsPanel() {
       </div>
 
       {editId != null && (
-        <ContestEditor contestId={editId} onClose={() => setEditId(null)} />
+        // key: a fresh editor per contest, so one contest's form state can
+        // never be saved onto another while the new one loads.
+        <ContestEditor key={editId} contestId={editId} onClose={() => setEditId(null)} />
       )}
     </div>
   );

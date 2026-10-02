@@ -195,6 +195,8 @@ def _compute_scoreboard(
         "is_frozen": contest.is_frozen and not reveal_frozen,
         "freeze_at": freeze_at.isoformat() if freeze_at else None,
         "server_time": timezone.now().isoformat(),
+        "status": contest.status,
+        "end_time": contest.end_time.isoformat(),
         "problems": [
             {
                 "letter": cp.letter,

@@ -130,6 +130,8 @@ export type Scoreboard = {
   is_frozen: boolean;
   freeze_at: string | null;
   server_time: string;
+  status: "upcoming" | "active" | "past";
+  end_time: string;
   problems: Array<{
     letter: string;
     problem_id: number;

@@ -25,7 +25,7 @@ const emptyDraft = {
   order: 0,
   input_data: "",
   expected_output: "",
-  is_sample: true,
+  is_sample: false,
   points: 1,
 };
 

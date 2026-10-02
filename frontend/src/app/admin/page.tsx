@@ -62,7 +62,9 @@ export default function AdminPage() {
   });
 
   const contests = useQuery({
-    queryKey: ["admin", "contests"],
+    // Not ["admin", "contests"]: that key is the panel's default-page-size
+    // list, and sharing it made each overwrite the other.
+    queryKey: ["admin", "contests", "metrics"],
     queryFn: () => apiFetch<Paginated<ContestListItem>>("/contests/?page_size=100"),
     enabled: !!me.data?.is_platform_admin,
   });
