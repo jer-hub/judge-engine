@@ -1,5 +1,7 @@
 import os
 import socket
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import docker
@@ -13,6 +15,7 @@ from judge.executor import (
     _java_run_command,
     _OutputPump,
     _process_runtime_ms,
+    _split_cpu_marker,
 )
 
 
@@ -47,7 +50,7 @@ class ExecutorLimitsTests(SimpleTestCase):
         api.inspect_container.return_value = state or _exited_state()
         return JudgeExecutor(), api
 
-    def _run(self, executor, **overrides):
+    def _run(self, executor, pump_text=("3\n", ""), **overrides):
         kwargs = dict(
             host_workspace="/tmp/work",
             command=["java", "Solution"],
@@ -61,7 +64,7 @@ class ExecutorLimitsTests(SimpleTestCase):
                 patch.object(executor, "_feed_stdin"):
             pump = pump_cls.return_value
             pump.overflowed = False
-            pump.text.return_value = ("3\n", "")
+            pump.text.return_value = pump_text
             return executor._run_container(**kwargs)
 
     @patch("judge.executor.docker.from_env")
@@ -218,10 +221,58 @@ class ExecutorLimitsTests(SimpleTestCase):
 
     def test_run_command_sizes_stack_and_heap(self):
         cmd = _java_run_command(256)
-        self.assertEqual(cmd[0], "java")
-        self.assertIn("-Xmx192m", cmd)
-        self.assertIn("-Xss64m", cmd)
-        self.assertEqual(cmd[-1], "Solution")
+        # Wrapped so the container reports its CPU time afterwards.
+        self.assertEqual(cmd[:2], ["sh", "-c"])
+        java = cmd[cmd.index("java"):]
+        self.assertIn("-Xmx192m", java)
+        self.assertIn("-Xss64m", java)
+        self.assertEqual(java[-1], "Solution")
+
+    @patch("judge.executor.docker.from_env")
+    def test_time_limit_uses_cpu_time_not_wall_time(self, mocked_from_env):
+        # 1.8 s on the clock (a busy host), but only 0.7 s of CPU: accepted.
+        executor, _ = self._executor(
+            mocked_from_env, _exited_state(finished="2026-10-01T10:00:01.800000000Z")
+        )
+        result = self._run(
+            executor, time_limit_ms=1000,
+            pump_text=("3\n", "warn\n\n__JUDGE_CPU_USEC=700123\n"),
+        )
+        self.assertEqual(result.execution_time_ms, 700)
+        self.assertFalse(result.timed_out)
+        self.assertEqual(result.stderr, "warn\n")  # marker stripped
+        self.assertEqual(executor._classify_run(result, "3"), "Accepted")
+
+        busy = self._run(
+            executor, time_limit_ms=1000, pump_text=("3\n", "\n__JUDGE_CPU_USEC=1250000\n"),
+        )
+        self.assertEqual(busy.execution_time_ms, 1250)
+        self.assertEqual(executor._classify_run(busy, "3"), "TimeLimitExceeded")
+
+    def test_cpu_marker_must_be_last(self):
+        # A program printing its own marker earlier cannot fake its time.
+        self.assertEqual(
+            _split_cpu_marker("__JUDGE_CPU_USEC=1\nmore output\n"),
+            ("__JUDGE_CPU_USEC=1\nmore output\n", None),
+        )
+        self.assertEqual(
+            _split_cpu_marker("__JUDGE_CPU_USEC=1\n\n__JUDGE_CPU_USEC=2500000\n"),
+            ("__JUDGE_CPU_USEC=1\n", 2500),
+        )
+
+    @patch("judge.executor.docker.from_env")
+    def test_compile_timeout_is_a_sandbox_error(self, mocked_from_env):
+        executor, _ = self._executor(mocked_from_env)
+        timed_out = RunResult(
+            verdict="TimeLimitExceeded", stdout="", stderr="", execution_time_ms=None,
+            exit_code=None, timed_out=True,
+        )
+        with patch.object(executor, "ensure_image"), \
+                patch.object(executor, "_run_container", return_value=timed_out), \
+                patch.object(executor, "_host_data_dir", "/srv/judge_data"), \
+                patch.object(executor, "data_dir", Path(tempfile.mkdtemp())):
+            with self.assertRaises(SandboxError):
+                executor.judge_submission_source("class Solution {}", [], 1000, 256)
 
 
 class OutputPumpTests(SimpleTestCase):
