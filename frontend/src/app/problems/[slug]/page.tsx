@@ -5,11 +5,12 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { CodeEditor, JAVA_STUB } from "@/components/CodeEditor";
+import { ContestProblemBanner } from "@/components/ContestProblemBanner";
 import { StatementContent } from "@/components/StatementContent";
 import { SubmissionStatus, VerdictBadge } from "@/components/SubmissionStatus";
 import { ApiError, apiFetch } from "@/lib/api";
 import { draftKey, loadDraft, saveDraft } from "@/lib/drafts";
-import type { ProblemDetail, RunPreview, Submission, User } from "@/lib/types";
+import type { ContestDetail, ProblemDetail, RunPreview, Submission, User } from "@/lib/types";
 
 const RUN_POLL_INTERVAL_MS = 700;
 const RUN_POLL_TIMEOUT_MS = 90_000;
@@ -40,6 +41,15 @@ function ProblemDetailInner() {
     queryKey: ["problem", slug],
     queryFn: () => apiFetch<ProblemDetail>(`/problems/${slug}/`),
   });
+
+  // Opened from a contest: its window decides whether Submit is allowed.
+  const contestQuery = useQuery({
+    queryKey: ["contest", contestId],
+    queryFn: () => apiFetch<ContestDetail>(`/contests/${contestId}/`),
+    enabled: !!contestId,
+  });
+  const contest = contestQuery.data;
+  const contestOver = !!contestId && contest?.my_status !== "active";
 
   const { data: me } = useQuery({
     queryKey: ["me"],
@@ -140,16 +150,24 @@ function ProblemDetailInner() {
   }
 
   const busy = submit.isPending || run.isPending;
+  // Practice "Run" stays available after the contest; graded Submit doesn't.
+  const submitBlocked = busy || contestOver;
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <section className="space-y-4">
+        {contest && (
+          <ContestProblemBanner
+            contest={contest}
+            slug={slug}
+            onPhaseChange={() => void contestQuery.refetch()}
+          />
+        )}
         <div>
           <h1 className="text-3xl font-semibold text-white">{problem.title}</h1>
           <p className="mt-1 text-sm text-slate-400">
             {problem.time_limit_ms} ms · {problem.memory_limit_mb} MB ·{" "}
             <span className="capitalize">{problem.difficulty}</span>
-            {contestId ? ` · Contest #${contestId}` : ""}
             {" · "}
             {problem.run_all_tests
               ? "Runs all tests (feedback)"
@@ -240,7 +258,8 @@ function ProblemDetailInner() {
           <button
             type="button"
             onClick={() => submit.mutate()}
-            disabled={busy}
+            disabled={submitBlocked}
+            title={contestOver ? "This contest is over for you" : undefined}
             className="rounded bg-emerald-600 px-4 py-2 font-medium hover:bg-emerald-500 disabled:opacity-60"
           >
             {submit.isPending ? "Submitting…" : "Submit Java"}

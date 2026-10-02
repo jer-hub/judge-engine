@@ -80,6 +80,7 @@ export type ContestDetail = ContestListItem & {
   server_time: string;
   hold_results_until_revealed: boolean;
   results_revealed_at: string | null;
+  practice_after_end: boolean;
   /** The viewer's own window: a time extension moves it past end_time. */
   my_end_time: string;
   my_status: "upcoming" | "active" | "past";

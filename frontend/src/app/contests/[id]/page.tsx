@@ -113,6 +113,14 @@ export default function ContestDetailPage() {
                     >
                       {cp.problem.title}
                     </Link>
+                  ) : data.my_status === "past" && data.practice_after_end ? (
+                    <Link
+                      href={`/problems/${cp.problem.slug}`}
+                      className="text-emerald-300 hover:underline"
+                    >
+                      {cp.problem.title}{" "}
+                      <span className="text-xs text-slate-500">(practice)</span>
+                    </Link>
                   ) : (
                     <span>{cp.problem.title}</span>
                   )}
