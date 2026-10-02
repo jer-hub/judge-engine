@@ -7,10 +7,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Every dependency ships wheels (psycopg[binary], Pillow), so no compiler or
-# libpq headers in the image; versions are pinned by requirements.lock.
-COPY requirements.txt requirements.lock ./
-RUN pip install -r requirements.txt -c requirements.lock
+# Every dependency ships wheels (e.g. psycopg[binary]), so no compiler or
+# libpq headers in the image; requirements.txt pins every version (pip-tools).
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
 
 # Non-root by default. The judge workers override this with `user: "0"` in
 # compose: they need the Docker socket, which is root-equivalent anyway.

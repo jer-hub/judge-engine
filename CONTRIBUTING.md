@@ -90,6 +90,21 @@ Separately, run Celery worker:
 celery -A config worker --loglevel=info
 ```
 
+### Backend dependencies
+
+`backend/requirements.in` lists the direct dependencies as version ranges;
+`backend/requirements.txt` is generated from it with pip-tools and pins every
+package. Change `requirements.in`, then regenerate in the backend's Python
+image so the pins match production:
+
+```bash
+cd backend
+docker run --rm -v "$PWD:/w" -w /w python:3.12-slim sh -c   "pip install -q pip-tools && pip-compile --strip-extras --annotation-style=line requirements.in -o requirements.txt"
+```
+
+Run the tests, then commit both files. Dependabot keeps the pins current
+within the ranges; widening a range (a new major version) is a deliberate edit.
+
 ## Testing
 
 ### Backend Tests
@@ -108,7 +123,7 @@ python manage.py test
 Known vulnerabilities in the pinned dependencies (CI runs this too):
 
 ```bash
-docker compose exec backend sh -c "pip install -q pip-audit && pip-audit -r requirements.lock"
+docker compose exec backend sh -c "pip install -q pip-audit && pip-audit -r requirements.txt"
 ```
 
 ### Frontend Tests
