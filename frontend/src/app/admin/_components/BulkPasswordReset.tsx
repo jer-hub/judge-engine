@@ -66,13 +66,13 @@ export function BulkPasswordReset() {
           placeholder="Class section, e.g. BSIT-1A"
           value={section}
           onChange={(e) => setSection(e.target.value)}
-          className="rounded border border-slate-700 bg-slate-900 px-3 py-1.5"
+          className="rounded-sm border border-slate-700 bg-slate-900 px-3 py-1.5"
         />
         <button
           type="button"
           onClick={() => setConfirming(true)}
           disabled={!section.trim() || reset.isPending}
-          className="cursor-pointer rounded bg-amber-500 px-3 py-1.5 font-medium text-slate-950 hover:bg-amber-400 disabled:opacity-50"
+          className="cursor-pointer rounded-sm bg-amber-500 px-3 py-1.5 font-medium text-slate-950 hover:bg-amber-400 disabled:opacity-50"
         >
           {reset.isPending ? "Resetting…" : "Generate new passwords"}
         </button>
@@ -96,21 +96,21 @@ export function BulkPasswordReset() {
             <button
               type="button"
               onClick={() => window.print()}
-              className="cursor-pointer rounded border border-slate-700 px-3 py-1 text-xs hover:bg-slate-800"
+              className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-xs hover:bg-slate-800"
             >
               Print
             </button>
             <button
               type="button"
               onClick={() => downloadCsv(rows, section)}
-              className="cursor-pointer rounded border border-slate-700 px-3 py-1 text-xs hover:bg-slate-800"
+              className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-xs hover:bg-slate-800"
             >
               Download CSV
             </button>
             <button
               type="button"
               onClick={() => setRows(null)}
-              className="cursor-pointer rounded border border-slate-700 px-3 py-1 text-xs text-slate-400 hover:bg-slate-800"
+              className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-xs text-slate-400 hover:bg-slate-800"
             >
               Done
             </button>

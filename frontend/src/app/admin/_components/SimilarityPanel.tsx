@@ -24,7 +24,7 @@ function SourcePane({ side }: { side: Side }) {
         </Link>{" "}
         ({side.status})
       </p>
-      <pre className="max-h-96 overflow-auto rounded bg-slate-950 p-2 text-xs text-slate-200">
+      <pre className="max-h-96 overflow-auto rounded-sm bg-slate-950 p-2 text-xs text-slate-200">
         {isLoading ? "Loading…" : (data?.source_code ?? "")}
       </pre>
     </div>
@@ -48,14 +48,14 @@ export function SimilarityPanel({ contestId }: { contestId: number }) {
   const pairs = data?.pairs ?? [];
 
   return (
-    <div className="space-y-3 rounded border border-slate-800 bg-slate-900/40 p-3 text-sm">
+    <div className="space-y-3 rounded-sm border border-slate-800 bg-slate-900/40 p-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-slate-400">Similar code</span>
         <select
           aria-label="Similarity threshold"
           value={threshold}
           onChange={(e) => setThreshold(Number(e.target.value))}
-          className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+          className="rounded-sm border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
         >
           <option value={0.5}>50%+</option>
           <option value={0.6}>60%+</option>
@@ -66,7 +66,7 @@ export function SimilarityPanel({ contestId }: { contestId: number }) {
           type="button"
           onClick={() => (requested ? void refetch() : setRequested(true))}
           disabled={isFetching}
-          className="cursor-pointer rounded border border-slate-700 px-3 py-1 text-xs text-emerald-300 hover:bg-slate-800 disabled:opacity-50"
+          className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-xs text-emerald-300 hover:bg-slate-800 disabled:opacity-50"
         >
           {isFetching ? "Checking…" : "Check submissions"}
         </button>
@@ -87,7 +87,7 @@ export function SimilarityPanel({ contestId }: { contestId: number }) {
           {pairs.map((p) => {
             const key = `${p.a.submission_id}-${p.b.submission_id}`;
             return (
-              <li key={key} className="rounded border border-slate-800 p-2">
+              <li key={key} className="rounded-sm border border-slate-800 p-2">
                 <div className="flex flex-wrap items-center gap-3 text-xs">
                   <span className="font-mono text-emerald-300">{p.problem_letter}</span>
                   <span className="text-slate-200">

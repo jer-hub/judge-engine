@@ -78,7 +78,7 @@ export function ContestResultsControls({ contest }: Props) {
   const revealedAt = contest.results_revealed_at ? new Date(contest.results_revealed_at) : null;
 
   return (
-    <div className="space-y-3 rounded border border-slate-800 bg-slate-900/40 p-3 text-sm">
+    <div className="space-y-3 rounded-sm border border-slate-800 bg-slate-900/40 p-3 text-sm">
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-slate-400">Scoreboard</span>
         <span
@@ -99,7 +99,7 @@ export function ContestResultsControls({ contest }: Props) {
             type="button"
             onClick={() => reveal.mutate(true)}
             disabled={reveal.isPending}
-            className="cursor-pointer rounded border border-slate-700 px-3 py-1 text-xs text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
+            className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-xs text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
           >
             Reveal final standings
           </button>
@@ -109,7 +109,7 @@ export function ContestResultsControls({ contest }: Props) {
               type="button"
               onClick={() => reveal.mutate(false)}
               disabled={reveal.isPending}
-              className="cursor-pointer rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
+              className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-xs text-slate-300 transition hover:bg-slate-800 disabled:opacity-50"
             >
               Freeze again
             </button>
@@ -127,7 +127,7 @@ export function ContestResultsControls({ contest }: Props) {
         <div className="flex flex-wrap items-center gap-2">
           <select
             aria-label="Student to extend"
-            className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+            className="rounded-sm border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
           >
@@ -143,7 +143,7 @@ export function ContestResultsControls({ contest }: Props) {
             min={0}
             max={1440}
             aria-label="Extra minutes"
-            className="w-20 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
+            className="w-20 rounded-sm border border-slate-700 bg-slate-900 px-2 py-1 text-xs"
             value={minutes}
             onChange={(e) => setMinutes(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
             onKeyDown={(e) => {
@@ -159,7 +159,7 @@ export function ContestResultsControls({ contest }: Props) {
             type="button"
             onClick={addExtension}
             disabled={!username || extend.isPending}
-            className="cursor-pointer rounded border border-slate-700 px-3 py-1 text-xs text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
+            className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-xs text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
           >
             Set extension
           </button>
@@ -172,7 +172,7 @@ export function ContestResultsControls({ contest }: Props) {
             {extended.map((p) => (
               <li
                 key={p.id}
-                className="flex items-center gap-1 rounded bg-slate-800 px-2 py-0.5 text-xs text-slate-200"
+                className="flex items-center gap-1 rounded-sm bg-slate-800 px-2 py-0.5 text-xs text-slate-200"
               >
                 {p.username} +{p.extra_minutes} min
                 <button

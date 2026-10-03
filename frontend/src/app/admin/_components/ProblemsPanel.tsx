@@ -213,7 +213,7 @@ export function ProblemsPanel() {
             aria-hidden="true"
           />
           <input
-            className="w-full rounded-lg border border-slate-700 bg-slate-950/70 py-2 pl-9 pr-3 text-sm text-slate-100 outline-none transition focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
+            className="w-full rounded-lg border border-slate-700 bg-slate-950/70 py-2 pl-9 pr-3 text-sm text-slate-100 outline-hidden transition focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600"
             placeholder="Search title, slug, or tag"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -237,7 +237,7 @@ export function ProblemsPanel() {
           <label className="block text-sm">
             <span className="mb-1 block text-slate-400">Title</span>
             <input
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.title}
               onChange={(e) => {
                 const title = e.target.value;
@@ -255,7 +255,7 @@ export function ProblemsPanel() {
               Slug <span className="text-slate-500">(set at creation; cannot change later)</span>
             </span>
             <input
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs"
               value={form.slug}
               onChange={(e) => {
                 const slug = e.target.value;
@@ -276,7 +276,7 @@ export function ProblemsPanel() {
           <label className="block text-sm">
             <span className="mb-1 block text-slate-400">Difficulty</span>
             <select
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.difficulty}
               onChange={(e) => setForm((prev) => ({ ...prev, difficulty: e.target.value }))}
             >
@@ -288,7 +288,7 @@ export function ProblemsPanel() {
           <label className="block text-sm">
             <span className="mb-1 block text-slate-400">Tags (comma-separated)</span>
             <input
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.tags}
               onChange={(e) => setForm((prev) => ({ ...prev, tags: e.target.value }))}
             />
@@ -299,7 +299,7 @@ export function ProblemsPanel() {
               type="number"
               min={1000}
               max={30000}
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.time_limit_ms}
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, time_limit_ms: Number(e.target.value) }))
@@ -312,7 +312,7 @@ export function ProblemsPanel() {
               type="number"
               min={96}
               max={2048}
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.memory_limit_mb}
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, memory_limit_mb: Number(e.target.value) }))

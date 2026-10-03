@@ -408,11 +408,11 @@ export function ContestEditor({ contestId, onClose }: Props) {
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded border border-slate-800 bg-slate-900/40 p-3 text-xs">
+      <div className="flex flex-wrap items-center gap-2 rounded-sm border border-slate-800 bg-slate-900/40 p-3 text-xs">
         <span className="text-slate-400">Results</span>
         <select
           aria-label="Section to export"
-          className="rounded border border-slate-700 bg-slate-900 px-2 py-1"
+          className="rounded-sm border border-slate-700 bg-slate-900 px-2 py-1"
           value={exportSection}
           onChange={(e) => setExportSection(e.target.value)}
         >
@@ -427,7 +427,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
           type="button"
           onClick={() => void exportStandings()}
           disabled={exporting}
-          className="cursor-pointer rounded border border-slate-700 px-3 py-1 text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
+          className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
         >
           {exporting ? "Exporting…" : "Export standings (CSV)"}
         </button>
@@ -435,7 +435,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
           type="button"
           onClick={() => setConfirmRejudge(true)}
           disabled={rejudgeMutation.isPending}
-          className="cursor-pointer rounded border border-slate-700 px-3 py-1 text-amber-300 transition hover:bg-slate-800 disabled:opacity-50"
+          className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-amber-300 transition hover:bg-slate-800 disabled:opacity-50"
         >
           Rejudge contest
         </button>
@@ -466,7 +466,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
         <label className="block text-sm sm:col-span-2">
           <span className="mb-1 block text-slate-400">Title</span>
           <input
-            className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+            className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
             value={title}
             onChange={(e) => {
               markDirty();
@@ -478,7 +478,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
         <label className="block text-sm sm:col-span-2">
           <span className="mb-1 block text-slate-400">Description</span>
           <textarea
-            className="min-h-[72px] w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+            className="min-h-[72px] w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
             value={description}
             onChange={(e) => {
               markDirty();
@@ -490,7 +490,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
           <span className="mb-1 block text-slate-400">Start</span>
           <input
             type="datetime-local"
-            className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+            className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
             value={startTime}
             onChange={(e) => {
               markDirty();
@@ -508,7 +508,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
           </span>
           <input
             type="datetime-local"
-            className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+            className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
             value={endTime}
             onChange={(e) => {
               markDirty();
@@ -525,7 +525,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
               type="button"
               onClick={() => applyDurationHours(h)}
               aria-label={`Set contest length to ${h} hour${h === 1 ? "" : "s"} from start`}
-              className="cursor-pointer rounded border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
+              className="cursor-pointer rounded-sm border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
             >
               {h}h
             </button>
@@ -536,7 +536,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
           <input
             type="number"
             min={0}
-            className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+            className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
             value={freeze}
             onChange={(e) => {
               markDirty();
@@ -626,7 +626,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
         </p>
 
         {problems.length === 0 ? (
-          <p className="mb-3 rounded border border-dashed border-slate-700 px-3 py-4 text-center text-xs text-slate-500">
+          <p className="mb-3 rounded-sm border border-dashed border-slate-700 px-3 py-4 text-center text-xs text-slate-500">
             No problems yet — pick from the list below.
           </p>
         ) : (
@@ -636,7 +636,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
               return (
                 <li
                   key={row.problem_id}
-                  className="flex flex-wrap items-center gap-2 rounded border border-slate-800 px-3 py-2 text-xs"
+                  className="flex flex-wrap items-center gap-2 rounded-sm border border-slate-800 px-3 py-2 text-xs"
                 >
                   <span className="w-6 font-mono font-semibold text-emerald-300">
                     {row.letter}
@@ -653,7 +653,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
                       aria-label="Move up"
                       disabled={idx === 0}
                       onClick={() => moveProblem(idx, -1)}
-                      className="cursor-pointer rounded border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="cursor-pointer rounded-sm border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       ↑
                     </button>
@@ -662,7 +662,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
                       aria-label="Move down"
                       disabled={idx === problems.length - 1}
                       onClick={() => moveProblem(idx, 1)}
-                      className="cursor-pointer rounded border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="cursor-pointer rounded-sm border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       ↓
                     </button>
@@ -682,7 +682,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
         )}
 
         <input
-          className="mb-2 w-full rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm"
+          className="mb-2 w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm"
           placeholder="Search problems to add…"
           aria-label="Search problems to add"
           value={problemSearch}
@@ -690,7 +690,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
         />
         <ul
           aria-label="Problems available to add"
-          className="max-h-40 space-y-1 overflow-y-auto rounded border border-slate-800 p-2"
+          className="max-h-40 space-y-1 overflow-y-auto rounded-sm border border-slate-800 p-2"
         >
           {filteredAvailable.length === 0 ? (
             <li className="px-2 py-1 text-xs text-slate-500">
@@ -702,7 +702,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
                 <button
                   type="button"
                   onClick={() => addProblem(p.id)}
-                  className="flex w-full cursor-pointer items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800"
+                  className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800"
                 >
                   <span>
                     {p.title}
@@ -761,7 +761,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
         )}
 
         <input
-          className="mb-2 w-full rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm"
+          className="mb-2 w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm"
           placeholder="Search roster (username, class, school id)…"
           aria-label="Search roster by username, class, or school id"
           value={rosterSearch}
@@ -769,7 +769,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
         />
         <ul
           aria-label="User roster"
-          className="mb-2 max-h-44 space-y-1 overflow-y-auto rounded border border-slate-800 p-2"
+          className="mb-2 max-h-44 space-y-1 overflow-y-auto rounded-sm border border-slate-800 p-2"
         >
           {roster.isLoading && (
             <li className="px-2 py-1 text-xs text-slate-500">Loading roster…</li>
@@ -807,7 +807,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
 
         <div className="flex flex-wrap gap-2">
           <input
-            className="min-w-[200px] flex-1 rounded border border-slate-700 bg-slate-900 px-3 py-1.5 font-mono text-xs"
+            className="min-w-[200px] flex-1 rounded-sm border border-slate-700 bg-slate-900 px-3 py-1.5 font-mono text-xs"
             placeholder="Paste usernames (comma or space separated)"
             aria-label="Paste usernames separated by comma or space"
             value={pasteBuffer}
@@ -822,7 +822,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
           <button
             type="button"
             onClick={applyPaste}
-            className="cursor-pointer rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+            className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
           >
             Add pasted
           </button>

@@ -190,7 +190,7 @@ export default function AdminPage() {
                 onClick={() => setTab(t.id)}
                 className={`cursor-pointer rounded-lg px-3 py-2 text-sm font-medium transition ${
                   selected
-                    ? "bg-slate-800 text-white shadow-sm"
+                    ? "bg-slate-800 text-white shadow-xs"
                     : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
                 }`}
               >
@@ -204,7 +204,7 @@ export default function AdminPage() {
           role="tabpanel"
           id={`admin-panel-${tab}`}
           aria-labelledby={`admin-tab-${tab}`}
-          className="mt-4 rounded-xl border border-slate-800 bg-slate-950/40 p-4 backdrop-blur-sm"
+          className="mt-4 rounded-xl border border-slate-800 bg-slate-950/40 p-4 backdrop-blur-xs"
         >
           {tab === "problems" && <ProblemsPanel />}
           {tab === "contests" && <ContestsPanel />}
@@ -229,7 +229,7 @@ function AccessCard({
   actionLabel: string;
 }) {
   return (
-    <div className="mx-auto max-w-lg rounded-xl border border-slate-800 bg-slate-950/60 p-8 text-center backdrop-blur">
+    <div className="mx-auto max-w-lg rounded-xl border border-slate-800 bg-slate-950/60 p-8 text-center backdrop-blur-sm">
       <h1 className="text-2xl font-semibold text-white">{title}</h1>
       <p className="mt-2 text-sm text-slate-400">{body}</p>
       <Link
