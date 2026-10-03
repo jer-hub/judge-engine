@@ -53,6 +53,7 @@ We take the following seriously:
 4. **Harden judge sandboxing:**
    - Review Docker image updates (`eclipse-temurin:17-jdk-jammy`)
    - Consider additional seccomp/AppArmor profiles if deploying on untrusted hardware
+   - Sandboxes run as `nobody` (uid 65534) with a job folder only that user can open. For a stronger boundary, install gVisor on the Docker host and set `JUDGE_RUNTIME=runsc`; enabling Docker's `userns-remap` also keeps sandbox uids from mapping to real host users
    - **The judge workers mount `/var/run/docker.sock`.** Docker socket access is equivalent to root on the host, so a compromise of a worker container (or of a dependency it loads) is a host compromise. Run the stack on a dedicated machine/VM, keep worker images minimal and patched, and never expose the Docker API over TCP. A rootless Docker daemon or a socket proxy that only allows container create/start/attach/inspect/kill/remove narrows this further.
    - Monitor judge logs for crashes or anomalies
 

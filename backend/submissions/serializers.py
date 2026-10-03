@@ -4,7 +4,7 @@ from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
 
-from contests.access import user_can_practice_problem
+from contests.access import running_contest_with_problem, user_can_practice_problem
 from contests.models import Contest, ContestParticipant
 from problems.models import Problem
 
@@ -119,12 +119,15 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"problem": "Problem is not part of this contest."}
                 )
-        elif (
-            not problem.is_published
-            and not getattr(user, "is_platform_admin", False)
-            and not user_can_practice_problem(user, problem)
-        ):
-            raise serializers.ValidationError({"problem": "Problem is not published."})
+        elif not getattr(user, "is_platform_admin", False):
+            if not problem.is_published and not user_can_practice_problem(user, problem):
+                raise serializers.ValidationError({"problem": "Problem is not published."})
+            running = running_contest_with_problem(user, problem)
+            if running is not None:
+                raise serializers.ValidationError(
+                    {"contest": f"This problem is in “{running.title}”, which you are "
+                                "taking now. Submit it from the contest."}
+                )
 
         return attrs
 

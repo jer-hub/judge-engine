@@ -275,6 +275,9 @@ JUDGE_STDIN_MAX_BYTES = env("JUDGE_STDIN_MAX_BYTES")
 # Combined stdout+stderr cap per run; beyond it the container is killed.
 JUDGE_OUTPUT_MAX_BYTES = env("JUDGE_OUTPUT_MAX_BYTES")
 JUDGE_IMAGE = env("JUDGE_IMAGE")
+# Optional OCI runtime for sandboxes, e.g. "runsc" for gVisor (must be
+# installed on the Docker host). Empty uses Docker's default runtime.
+JUDGE_RUNTIME = env("JUDGE_RUNTIME", default="")
 JUDGE_CONCURRENCY = env("JUDGE_CONCURRENCY")
 # A submission Judging (claimed) or Pending (queued) for longer than this is
 # treated as lost (worker crash, Redis restart) and re-enqueued by the sweep.

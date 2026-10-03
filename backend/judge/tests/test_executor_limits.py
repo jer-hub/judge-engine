@@ -1,6 +1,7 @@
 import os
 import socket
 import tempfile
+import threading
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -65,6 +66,8 @@ class ExecutorLimitsTests(SimpleTestCase):
                 patch.object(executor, "_feed_stdin"):
             pump = pump_cls.return_value
             pump.overflowed = False
+            pump.completed = True
+            pump.is_alive.return_value = False
             pump.text.return_value = pump_text
             return executor._run_container(**kwargs)
 
@@ -85,7 +88,7 @@ class ExecutorLimitsTests(SimpleTestCase):
         self.assertTrue(kwargs["read_only"])
         self.assertEqual(kwargs["log_config"]["Type"], "none")
         self.assertEqual(
-            api.create_container_config.call_args.kwargs["user"], "1000:1000"
+            api.create_container_config.call_args.kwargs["user"], "65534:65534"
         )
 
     @patch("judge.executor.docker.from_env")
@@ -131,6 +134,8 @@ class ExecutorLimitsTests(SimpleTestCase):
                 patch.object(executor, "_feed_stdin"):
             pump = pump_cls.return_value
             pump.overflowed = True
+            pump.completed = True
+            pump.is_alive.return_value = False
             pump.text.return_value = ("x" * 10, "")
             result = executor._run_container(
                 host_workspace="/tmp/work", command=["java", "Solution"],
@@ -140,6 +145,50 @@ class ExecutorLimitsTests(SimpleTestCase):
         api.kill.assert_called_once_with("abc")
         self.assertTrue(result.output_limit_exceeded)
         self.assertEqual(executor._classify_run(result, "x"), "OutputLimitExceeded")
+
+    @patch("judge.executor.docker.from_env")
+    def test_cut_off_output_is_a_sandbox_error_not_a_verdict(self, mocked_from_env):
+        # The stream did not reach EOF: grading it could turn AC into WA.
+        executor, _ = self._executor(mocked_from_env)
+        with patch("judge.executor._OutputPump") as pump_cls, \
+                patch.object(executor, "_feed_stdin"):
+            pump = pump_cls.return_value
+            pump.overflowed = False
+            pump.completed = False
+            pump.is_alive.return_value = False
+            pump.text.return_value = ("partial", "")
+            with self.assertRaises(SandboxError):
+                executor._run_container(
+                    host_workspace="/tmp/work", command=["java", "Solution"],
+                    time_limit_s=5, memory_limit_mb=256, stdin_data="",
+                    work_writable=False,
+                )
+
+    @patch("judge.executor.docker.from_env")
+    def test_stdin_is_fed_without_blocking_the_wall_limit(self, mocked_from_env):
+        # A program that never reads: sendall() would block forever.
+        executor, api = self._executor(mocked_from_env)
+        unblock = threading.Event()
+        self.addCleanup(unblock.set)
+        api.inspect_container.side_effect = [
+            {"State": {"Status": "running"}},
+            {"State": {"Status": "running"}},
+            _exited_state(exit_code=137),
+        ]
+        with patch("judge.executor._OutputPump") as pump_cls, \
+                patch.object(executor, "_feed_stdin", side_effect=lambda *_: unblock.wait()):
+            pump = pump_cls.return_value
+            pump.overflowed = False
+            pump.completed = True
+            pump.is_alive.return_value = False
+            pump.text.return_value = ("", "")
+            result = executor._run_container(
+                host_workspace="/tmp/work", command=["java", "Solution"],
+                time_limit_s=0, memory_limit_mb=256, stdin_data="x" * 10,
+                work_writable=False,
+            )
+        api.kill.assert_called_once_with("abc")
+        self.assertTrue(result.timed_out)
 
     @patch("judge.executor.docker.from_env")
     def test_feed_stdin_tolerates_early_exit(self, mocked_from_env):

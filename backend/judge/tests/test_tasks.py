@@ -143,6 +143,24 @@ class RecordOutcomeTests(TestCase):
         self.assertIsNotNone(sub.judged_at)
 
 
+class TestCaseDeletedMidJudgeTests(TestCase):
+    def test_verdict_for_a_deleted_case_requeues_instead_of_failing(self):
+        sub = _submission(status=Submission.Status.JUDGING)
+        token = uuid.uuid4()
+        Submission.objects.filter(pk=sub.pk).update(judge_claim=token)
+        case = sub.problem.test_cases.get()
+        results = [{"test_case_id": case.id, "verdict": "Accepted"}]
+        case.delete()  # a teacher edits the problem mid-judge
+        with patch("judge.tasks.judge_submission.delay") as delay, \
+                self.captureOnCommitCallbacks(execute=True):
+            written = _record_outcome(sub.id, token, "Accepted", "", results)
+        self.assertFalse(written)
+        sub.refresh_from_db()
+        self.assertEqual(sub.status, Submission.Status.PENDING)
+        self.assertIsNone(sub.judge_claim)
+        delay.assert_called_once_with(sub.id)
+
+
 class EnqueueTests(TestCase):
     def test_broker_down_keeps_submission_pending(self):
         sub = _submission()
