@@ -199,6 +199,9 @@ class UserViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
                 },
                 status=status.HTTP_409_CONFLICT,
             )
+        # End their sessions first: a refresh token for a deleted user would
+        # otherwise fail the user lookup on every request.
+        revoke_user_sessions(user)
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=False, methods=["post"], url_path="bulk-reset-password")

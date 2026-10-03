@@ -21,8 +21,9 @@ class User(AbstractUser):
         return self.role == self.Role.ADMIN or self.is_superuser
 
     def save(self, *args, **kwargs):
-        if self.role == self.Role.ADMIN:
-            self.is_staff = True
+        # Django admin access follows the role: a teacher demoted to student
+        # must not keep /admin/ (or any model permissions granted there).
+        self.is_staff = self.role == self.Role.ADMIN or self.is_superuser
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:

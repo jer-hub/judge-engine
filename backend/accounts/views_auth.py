@@ -1,7 +1,8 @@
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import AllowAny
 from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 
 class LoginRateThrottle(AnonRateThrottle):
@@ -85,3 +86,16 @@ class ThrottledTokenObtainPairView(TokenObtainPairView):
         # the failure on the same history it checked.
         self._throttles = super().get_throttles()
         return self._throttles
+
+
+class SafeTokenRefreshView(TokenRefreshView):
+    """simplejwt looks the user up with .get() and lets DoesNotExist escape
+    as a 500 when the account was deleted; that is just an invalid token."""
+
+    def post(self, request, *args, **kwargs):
+        from accounts.models import User
+
+        try:
+            return super().post(request, *args, **kwargs)
+        except User.DoesNotExist as exc:
+            raise InvalidToken("User no longer exists.") from exc
