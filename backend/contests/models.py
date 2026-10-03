@@ -63,7 +63,17 @@ class Contest(models.Model):
             return False
         if now < freeze_at or now < self.start_time:
             return False
-        return now <= self.end_time or self.hold_results_until_revealed
+        if now <= self.end_time or self.hold_results_until_revealed:
+            return True
+        # Past the official end: stay frozen while anyone's time extension
+        # runs, or they would see the final standings mid-contest.
+        return now <= self.last_end
+
+    @property
+    def last_end(self):
+        """When the last participant's window closes (end + longest extension)."""
+        longest = self.participants.aggregate(m=models.Max("extra_minutes"))["m"] or 0
+        return self.end_time + timedelta(minutes=longest)
 
     @property
     def freeze_at(self):

@@ -9,6 +9,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase
 
 from judge.executor import (
+    CompileTimeout,
     JudgeExecutor,
     RunResult,
     SandboxError,
@@ -261,7 +262,7 @@ class ExecutorLimitsTests(SimpleTestCase):
         )
 
     @patch("judge.executor.docker.from_env")
-    def test_compile_timeout_is_a_sandbox_error(self, mocked_from_env):
+    def test_compile_timeout_is_charged_as_compile_timeout(self, mocked_from_env):
         executor, _ = self._executor(mocked_from_env)
         timed_out = RunResult(
             verdict="TimeLimitExceeded", stdout="", stderr="", execution_time_ms=None,
@@ -271,7 +272,7 @@ class ExecutorLimitsTests(SimpleTestCase):
                 patch.object(executor, "_run_container", return_value=timed_out), \
                 patch.object(executor, "_host_data_dir", "/srv/judge_data"), \
                 patch.object(executor, "data_dir", Path(tempfile.mkdtemp())):
-            with self.assertRaises(SandboxError):
+            with self.assertRaises(CompileTimeout):
                 executor.judge_submission_source("class Solution {}", [], 1000, 256)
 
 

@@ -92,6 +92,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    "axes",
     "accounts",
     "problems",
     "contests",
@@ -110,7 +111,24 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Last, per django-axes: turns a lockout into a 429 response.
+    "axes.middleware.AxesMiddleware",
 ]
+
+# django-axes locks a username+IP pair out after repeated failed Django admin
+# logins, which have no DRF throttle. The API login keeps its own throttles
+# (accounts/views_auth.py), so axes is limited to the admin site.
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
+AXES_FAILURE_LIMIT = env.int("AXES_FAILURE_LIMIT", default=5)
+AXES_COOLOFF_TIME = timedelta(minutes=env.int("AXES_COOLOFF_MINUTES", default=15))
+AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
+AXES_RESET_ON_SUCCESS = True
+AXES_ONLY_ADMIN_SITE = True
+# Same client-IP rule as the DRF throttles (NUM_PROXIES).
+AXES_CLIENT_IP_CALLABLE = "accounts.client_ip.client_ip"
 
 ROOT_URLCONF = "config.urls"
 

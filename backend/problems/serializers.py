@@ -2,6 +2,7 @@ from django.db import transaction
 from django.db.models import Count
 from rest_framework import serializers
 
+from .budget import judge_budget_error
 from .models import Problem, TestCase
 from .tags import normalize_tags
 from .test_case_sync import reconcile_test_cases
@@ -46,6 +47,15 @@ class TestCaseSerializer(serializers.ModelSerializer):
             "points",
         )
         read_only_fields = ("id",)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if self.instance is None:  # adding a case; edits keep the count
+            problem = attrs["problem"]
+            error = judge_budget_error(problem.time_limit_ms, problem.test_cases.count() + 1)
+            if error:
+                raise serializers.ValidationError({"problem": error})
+        return attrs
 
 
 class ProblemListSerializer(serializers.ModelSerializer):
@@ -148,6 +158,7 @@ class ProblemWriteSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        self._validate_judge_budget(attrs)
         publishing = attrs.get("is_published")
         if publishing is None and self.instance is not None:
             publishing = self.instance.is_published
@@ -171,6 +182,28 @@ class ProblemWriteSerializer(serializers.ModelSerializer):
                 }
             )
         return attrs
+
+    def _validate_judge_budget(self, attrs) -> None:
+        # Only when this request changes the limit or the cases, so an
+        # unrelated edit to an existing problem is never refused.
+        if "time_limit_ms" not in attrs and "test_cases" not in attrs:
+            return
+        time_limit_ms = attrs.get("time_limit_ms")
+        if time_limit_ms is None:
+            time_limit_ms = (
+                self.instance.time_limit_ms if self.instance is not None
+                else Problem._meta.get_field("time_limit_ms").get_default()
+            )
+        if "test_cases" in attrs:
+            count = len(attrs["test_cases"])
+        elif self.instance is not None:
+            count = self.instance.test_cases.count()
+        else:
+            count = 0
+        error = judge_budget_error(time_limit_ms, count)
+        if error:
+            field = "test_cases" if "test_cases" in attrs else "time_limit_ms"
+            raise serializers.ValidationError({field: error})
 
     @transaction.atomic
     def create(self, validated_data):
