@@ -142,7 +142,7 @@ export function TestCaseEditor({ problemId, problemTitle, onClose }: Props) {
         <label className="block text-xs sm:col-span-2">
           <span className="mb-1 block text-slate-400">Input</span>
           <textarea
-            className="min-h-[64px] w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+            className="min-h-[64px] w-full rounded-sm border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
             value={draft.input_data}
             onChange={(e) => setDraft((p) => ({ ...p, input_data: e.target.value }))}
           />
@@ -150,7 +150,7 @@ export function TestCaseEditor({ problemId, problemTitle, onClose }: Props) {
         <label className="block text-xs sm:col-span-2">
           <span className="mb-1 block text-slate-400">Expected output</span>
           <textarea
-            className="min-h-[64px] w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+            className="min-h-[64px] w-full rounded-sm border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
             value={draft.expected_output}
             onChange={(e) =>
               setDraft((p) => ({ ...p, expected_output: e.target.value }))
@@ -171,7 +171,7 @@ export function TestCaseEditor({ problemId, problemTitle, onClose }: Props) {
           <input
             type="number"
             min={0}
-            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5"
+            className="w-full rounded-sm border border-slate-700 bg-slate-900 px-2 py-1.5"
             value={draft.points}
             onChange={(e) => setDraft((p) => ({ ...p, points: Number(e.target.value) }))}
           />
@@ -180,7 +180,7 @@ export function TestCaseEditor({ problemId, problemTitle, onClose }: Props) {
           <button
             type="submit"
             disabled={createMutation.isPending}
-            className="cursor-pointer rounded bg-emerald-500 px-3 py-1.5 text-xs font-medium text-slate-950 transition hover:bg-emerald-400 disabled:opacity-60"
+            className="cursor-pointer rounded-sm bg-emerald-500 px-3 py-1.5 text-xs font-medium text-slate-950 transition hover:bg-emerald-400 disabled:opacity-60"
           >
             {createMutation.isPending ? "Adding…" : "Add test case"}
           </button>

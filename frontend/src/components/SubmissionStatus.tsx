@@ -43,7 +43,7 @@ export function SubmissionStatus({ submissionId }: Props) {
         <button
           type="button"
           onClick={() => void refetch()}
-          className="rounded border border-red-800 px-3 py-1 transition hover:bg-red-900/40"
+          className="rounded-sm border border-red-800 px-3 py-1 transition hover:bg-red-900/40"
         >
           Retry
         </button>
@@ -66,7 +66,7 @@ export function SubmissionStatus({ submissionId }: Props) {
         <VerdictBadge status={data.status} />
       </div>
       {data.compile_error && (
-        <pre className="overflow-x-auto rounded bg-red-950/40 p-3 text-xs text-red-200">
+        <pre className="overflow-x-auto rounded-sm bg-red-950/40 p-3 text-xs text-red-200">
           {data.compile_error}
         </pre>
       )}
@@ -120,7 +120,7 @@ export function VerdictBadge({ status }: { status: string }) {
         ? "bg-amber-900/60 text-amber-200"
         : "bg-red-900/60 text-red-200";
   return (
-    <span className={`rounded px-2 py-1 text-xs font-semibold ${color}`}>
+    <span className={`rounded-sm px-2 py-1 text-xs font-semibold ${color}`}>
       {verdictLabel(status)}
     </span>
   );

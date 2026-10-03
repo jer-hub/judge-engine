@@ -54,7 +54,7 @@ export function ActivityPanel() {
           aria-label="Area"
           value={area}
           onChange={(e) => setArea(e.target.value)}
-          className="rounded border border-slate-700 bg-slate-900 px-3 py-2"
+          className="rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
         >
           {AREAS.map((a) => (
             <option key={a.value} value={a.value}>
@@ -67,7 +67,7 @@ export function ActivityPanel() {
           placeholder="Admin username"
           value={actor}
           onChange={(e) => setActor(e.target.value)}
-          className="rounded border border-slate-700 bg-slate-900 px-3 py-2"
+          className="rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
         />
       </div>
       {isLoading && <p className="text-sm text-slate-400">Loading activity…</p>}

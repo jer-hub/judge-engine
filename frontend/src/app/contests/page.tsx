@@ -27,7 +27,7 @@ export default function ContestsPage() {
           >
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-lg font-medium text-white">{c.title}</h2>
-              <span className="rounded bg-slate-800 px-2 py-1 text-xs uppercase text-slate-300">
+              <span className="rounded-sm bg-slate-800 px-2 py-1 text-xs uppercase text-slate-300">
                 {c.status}
               </span>
             </div>

@@ -139,7 +139,7 @@ export function AccountsImport({ onImported }: Props) {
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
-          className="cursor-pointer rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:border-slate-500"
+          className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:border-slate-500"
         >
           Upload .csv
         </button>
@@ -150,14 +150,14 @@ export function AccountsImport({ onImported }: Props) {
             setResult(null);
             setError(null);
           }}
-          className="cursor-pointer rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:border-slate-500"
+          className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1.5 text-xs text-slate-200 hover:border-slate-500"
         >
           Insert header
         </button>
       </div>
 
       <textarea
-        className="min-h-[140px] w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs"
+        className="min-h-[140px] w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs"
         placeholder={`${SAMPLE_HEADER}\nalice,pass12345,Alice,Tan,alice@school.edu,S001,7A`}
         value={csvText}
         onChange={(e) => {

@@ -50,19 +50,19 @@ export default function ScoreboardPage() {
           )}
         </div>
         {data.freeze_at && !data.is_frozen && data.status === "active" && (
-          <span className="rounded bg-slate-800 px-3 py-1 text-sm text-slate-300">
+          <span className="rounded-sm bg-slate-800 px-3 py-1 text-sm text-slate-300">
             Freezes at {new Date(data.freeze_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </span>
         )}
         {data.is_frozen && data.freeze_at && data.status !== "past" && (
-          <span className="rounded bg-amber-900/50 px-3 py-1 text-sm text-amber-200">
+          <span className="rounded-sm bg-amber-900/50 px-3 py-1 text-sm text-amber-200">
             Frozen since{" "}
             {new Date(data.freeze_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             : new results are hidden
           </span>
         )}
         {data.is_frozen && data.status === "past" && (
-          <span className="rounded bg-amber-900/50 px-3 py-1 text-sm text-amber-200">
+          <span className="rounded-sm bg-amber-900/50 px-3 py-1 text-sm text-amber-200">
             Results held: final standings will be revealed by your teacher
           </span>
         )}
