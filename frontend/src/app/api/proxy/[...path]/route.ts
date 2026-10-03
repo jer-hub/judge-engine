@@ -11,6 +11,7 @@ import {
   setAuthCookies,
   type RefreshResult,
 } from "@/lib/auth-cookies";
+import { backendApiUrl } from "@/lib/proxy-path";
 import { rejectCrossOrigin } from "@/lib/same-origin";
 
 // Next 15: dynamic route params arrive as a Promise.
@@ -55,13 +56,10 @@ async function proxy(req: NextRequest, pathParts: string[]) {
   const refused = rejectCrossOrigin(req);
   if (refused) return refused;
 
-  // Django APPEND_SLASH cannot redirect POST while keeping the body — always use a trailing slash.
-  let path = pathParts.join("/");
-  if (path && !path.endsWith("/")) {
-    path = `${path}/`;
+  const url = backendApiUrl(backendBase(), pathParts, req.nextUrl.search || "");
+  if (url === null) {
+    return NextResponse.json({ detail: "Invalid path." }, { status: 400 });
   }
-  const search = req.nextUrl.search || "";
-  const url = `${backendBase()}/api/${path}${search}`;
 
   const ip = clientIp(req);
   let access = await getAccessToken();

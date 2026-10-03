@@ -39,3 +39,13 @@ class DjangoAdminLockoutTests(TestCase):
         for _ in range(2):
             self._login("teacher")
         self.assertEqual(self._login("teacher", "Correct-Horse-9").status_code, 302)
+
+    def test_api_login_failures_do_not_count_toward_admin_lockout(self):
+        for _ in range(5):
+            self.client.post(
+                "/api/auth/login/",
+                {"username": "teacher", "password": "wrong-password"},
+                content_type="application/json",
+                HTTP_X_FORWARDED_FOR="10.0.0.1",
+            )
+        self.assertEqual(self._login("teacher", "Correct-Horse-9").status_code, 302)

@@ -127,6 +127,7 @@ AXES_COOLOFF_TIME = timedelta(minutes=env.int("AXES_COOLOFF_MINUTES", default=15
 AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
 AXES_RESET_ON_SUCCESS = True
 AXES_ONLY_ADMIN_SITE = True
+AXES_HANDLER = "accounts.axes_handler.AdminOnlyAxesHandler"
 # Same client-IP rule as the DRF throttles (NUM_PROXIES).
 AXES_CLIENT_IP_CALLABLE = "accounts.client_ip.client_ip"
 
@@ -215,9 +216,14 @@ REST_FRAMEWORK = {
         "runs": "20/min",
         # Per IP: generous, since a lab behind NAT can share one address.
         "login": env("LOGIN_IP_THROTTLE_RATE", default="30/min"),
-        # Per username: the real brute-force cap.
-        "login-user": env("LOGIN_USER_THROTTLE_RATE", default="5/min"),
-        "logout": "10/min",
+        # Failed logins per username from one IP: the brute-force cap.
+        "login-user-ip": env("LOGIN_USER_IP_THROTTLE_RATE", default="5/min"),
+        # Failed logins per username across all IPs: bounds distributed
+        # guessing, loose enough that one attacker cannot lock a victim out.
+        "login-user": env("LOGIN_USER_THROTTLE_RATE", default="20/min"),
+        # Per client IP: a whole lab behind NAT logs out at the bell, and a
+        # throttled logout leaves the refresh token un-revoked.
+        "logout": env("LOGOUT_THROTTLE_RATE", default="120/min"),
         "user-import": "6/min",
     },
 }

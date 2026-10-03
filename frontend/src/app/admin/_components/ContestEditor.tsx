@@ -445,6 +445,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
         title="Rejudge this contest?"
         body={`Re-judge every finished submission in “${displayTitle}” against the current test cases. Verdicts and the scoreboard may change.`}
         confirmLabel="Rejudge"
+        busy={rejudgeMutation.isPending}
         onCancel={() => setConfirmRejudge(false)}
         onConfirm={() => rejudgeMutation.mutate()}
       />

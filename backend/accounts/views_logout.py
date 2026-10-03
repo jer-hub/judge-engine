@@ -1,23 +1,23 @@
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 
 class LogoutRateThrottle(UserRateThrottle):
-    scope = "logout"
+    """Per user, or per client IP when anonymous (the frontend's logout call
+    carries only the refresh token). One class: a second throttle with the
+    same scope would record each anonymous request twice under one key."""
 
-
-class LogoutAnonRateThrottle(AnonRateThrottle):
     scope = "logout"
 
 
 class LogoutView(APIView):
     permission_classes = [AllowAny]
-    throttle_classes = [LogoutRateThrottle, LogoutAnonRateThrottle]
+    throttle_classes = [LogoutRateThrottle]
 
     def post(self, request):
         refresh = request.data.get("refresh")
