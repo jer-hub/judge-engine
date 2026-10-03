@@ -92,3 +92,39 @@ class JudgeHealthTests(APITestCase):
         self.assertEqual(data["submissions"]["pending"], 2)
         self.assertEqual(data["submissions"]["system_error"], 1)
         self.assertIsNotNone(data["submissions"]["oldest_pending_seconds"])
+
+
+class SignInAuditTests(APITestCase):
+    def setUp(self):
+        User.objects.create_user(username="teacher", password="pass12345", role=User.Role.ADMIN)
+        User.objects.create_user(username="alice", password="pass12345")
+
+    def _login(self, username, password):
+        return self.client.post(
+            "/api/auth/login/", {"username": username, "password": password}, format="json"
+        )
+
+    def test_teacher_sign_ins_and_failures_are_recorded(self):
+        self._login("teacher", "wrong-password")
+        self._login("teacher", "pass12345")
+        self.assertEqual(
+            list(AuditEvent.objects.order_by("id").values_list("action", flat=True)),
+            ["auth.login_failed", "auth.login"],
+        )
+
+    def test_student_sign_ins_are_not_recorded(self):
+        self._login("alice", "wrong-password")
+        self._login("alice", "pass12345")
+        self.assertFalse(AuditEvent.objects.exists())
+
+    def test_dry_run_import_is_labelled(self):
+        token = RefreshToken.for_user(User.objects.get(username="teacher")).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        self.client.post(
+            "/api/users/import/",
+            {"csv_text": "username,password\nnewkid,Long-Enough-Pass-1\n", "dry_run": True},
+            format="json",
+        )
+        self.assertEqual(
+            AuditEvent.objects.get().action, "user.import_users.dry_run"
+        )

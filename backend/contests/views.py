@@ -1,4 +1,7 @@
-from django.db.models import Q
+from datetime import timedelta
+
+from django.db.models import DateTimeField, ExpressionWrapper, F, OuterRef, Q, Subquery, Value
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -38,12 +41,25 @@ class ContestViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
 
         status_filter = self.request.query_params.get("status")
         now = timezone.now()
+        if status_filter in ("active", "past"):
+            # The viewer's own end: a student with a time extension is still
+            # in an "active" contest after the official end.
+            extra = ContestParticipant.objects.filter(
+                contest=OuterRef("pk"), user_id=user.pk
+            ).values("extra_minutes")[:1]
+            qs = qs.annotate(
+                my_end=ExpressionWrapper(
+                    F("end_time")
+                    + Coalesce(Subquery(extra), 0) * Value(timedelta(minutes=1)),
+                    output_field=DateTimeField(),
+                )
+            )
         if status_filter == "upcoming":
             qs = qs.filter(start_time__gt=now)
         elif status_filter == "active":
-            qs = qs.filter(start_time__lte=now, end_time__gte=now)
+            qs = qs.filter(start_time__lte=now, my_end__gte=now)
         elif status_filter == "past":
-            qs = qs.filter(end_time__lt=now)
+            qs = qs.filter(my_end__lt=now)
         return qs
 
     def get_serializer_class(self):

@@ -256,7 +256,10 @@ function ProblemDetailInner() {
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={() => run.mutate()}
+            onClick={() => {
+              submit.reset(); // show this action's error, not an older one
+              run.mutate();
+            }}
             disabled={busy}
             className="rounded-sm border border-slate-600 bg-slate-900 px-4 py-2 font-medium hover:bg-slate-800 disabled:opacity-60"
           >
@@ -264,7 +267,10 @@ function ProblemDetailInner() {
           </button>
           <button
             type="button"
-            onClick={() => submit.mutate()}
+            onClick={() => {
+              run.reset();
+              submit.mutate();
+            }}
             disabled={submitBlocked}
             title={contestOver ? "This contest is over for you" : undefined}
             className="rounded-sm bg-emerald-600 px-4 py-2 font-medium hover:bg-emerald-500 disabled:opacity-60"

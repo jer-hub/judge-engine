@@ -9,6 +9,7 @@ from contests.models import Contest
 from problems.models import Problem
 from problems.models import TestCase as ProblemTestCase
 from submissions.models import Submission, SubmissionResult
+from submissions.rejudge import INLINE_ENQUEUE_MAX
 
 User = get_user_model()
 URL = "/api/submissions/bulk-rejudge/"
@@ -59,6 +60,18 @@ class BulkRejudgeTests(APITestCase):
         elsewhere.refresh_from_db()
         self.assertEqual(judging.status, Submission.Status.JUDGING)
         self.assertEqual(elsewhere.status, Submission.Status.WRONG_ANSWER)
+
+    def test_large_batch_is_enqueued_by_a_task_not_the_request(self):
+        subs = [self._sub(Submission.Status.ACCEPTED) for _ in range(INLINE_ENQUEUE_MAX + 1)]
+        self._as(self.admin)
+        with patch("judge.tasks.judge_submission.delay") as delay, \
+                patch("judge.tasks.enqueue_judging_many.delay") as many:
+            resp = self.client.post(URL, {"problem": self.problem.id}, format="json")
+        self.assertEqual(resp.data["queued"], len(subs))
+        delay.assert_not_called()
+        self.assertEqual(sorted(many.call_args.args[0]), sorted(s.id for s in subs))
+        # Marked as queued, so the recovery sweep leaves them alone meanwhile.
+        self.assertFalse(Submission.objects.filter(enqueued_at__isnull=True).exists())
 
     def test_contest_scope(self):
         in_contest = self._sub(Submission.Status.WRONG_ANSWER, contest=self.contest)

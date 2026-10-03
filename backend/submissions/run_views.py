@@ -12,6 +12,9 @@ from .run_serializers import RunPreviewSerializer
 
 # How long a preview's owner record (and so its result) stays fetchable.
 RUN_OWNER_TTL_SECONDS = 600
+# A preview still queued after this is dropped (the student has long since
+# stopped waiting); its result then reads as "Preview failed. Please retry."
+RUN_QUEUE_EXPIRES_SECONDS = 300
 PENDING_STATUSES = ("Pending", "Running")
 
 
@@ -47,11 +50,14 @@ class RunPreviewView(APIView):
 
         from judge.tasks import preview_run
 
-        async_result = preview_run.delay(
-            source_code=data["source_code"],
-            stdin=data.get("stdin", ""),
-            time_limit_ms=problem.time_limit_ms,
-            memory_limit_mb=problem.memory_limit_mb,
+        async_result = preview_run.apply_async(
+            kwargs={
+                "source_code": data["source_code"],
+                "stdin": data.get("stdin", ""),
+                "time_limit_ms": problem.time_limit_ms,
+                "memory_limit_mb": problem.memory_limit_mb,
+            },
+            expires=RUN_QUEUE_EXPIRES_SECONDS,
         )
         _redis_client().setex(
             _owner_key(async_result.id), RUN_OWNER_TTL_SECONDS, request.user.id

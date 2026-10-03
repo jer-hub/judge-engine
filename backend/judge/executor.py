@@ -21,6 +21,9 @@ from docker.types import LogConfig
 logger = logging.getLogger("judge")
 
 OUTPUT_LIMIT_MESSAGE = "Output limit exceeded."
+# javac's container and heap, independent of the problem's memory limit.
+COMPILE_MEMORY_MB = 512
+COMPILE_HEAP_MB = 384
 # How long to wait, after the container exits, for its output to drain.
 PUMP_DRAIN_TIMEOUT_S = 10
 
@@ -232,18 +235,9 @@ class JudgeExecutor:
             _restrict_workspace(workspace)
             (workspace / "Solution.java").write_text(source_code, encoding="utf-8")
 
-            compile_result = self._run_container(
-                host_workspace=host_workspace,
-                command=["javac", "Solution.java"],
-                time_limit_s=settings.JUDGE_COMPILE_TIMEOUT_S,
-                memory_limit_mb=memory_limit_mb,
-                stdin_data=None,
-                work_writable=True,
-            )
+            compile_result = self._compile(host_workspace)
             if compile_result.timed_out:
                 raise CompileTimeout("Compilation timed out")
-            if compile_result.exit_code is None:
-                raise SandboxError("Compiler container exited without a status")
             if compile_result.exit_code not in (0,):
                 err = (compile_result.stderr or compile_result.stdout).strip()
                 return {
@@ -305,6 +299,29 @@ class JudgeExecutor:
         finally:
             shutil.rmtree(workspace, ignore_errors=True)
 
+    def _compile(self, host_workspace: str) -> "RunResult":
+        """Run javac with its own fixed memory, not the problem's limit: a
+        96 MB problem would otherwise give javac a ~24 MB heap, and a large
+        valid source would fail as a "compile error"."""
+        result = self._run_container(
+            host_workspace=host_workspace,
+            command=["javac", f"-J-Xmx{COMPILE_HEAP_MB}m", "Solution.java"],
+            time_limit_s=settings.JUDGE_COMPILE_TIMEOUT_S,
+            memory_limit_mb=COMPILE_MEMORY_MB,
+            stdin_data=None,
+            work_writable=True,
+        )
+        if result.timed_out:
+            return result
+        if result.exit_code is None:
+            raise SandboxError("Compiler container exited without a status")
+        if result.oom_killed or (
+            result.exit_code != 0 and "java.lang.OutOfMemoryError" in result.stderr
+        ):
+            # The compiler ran out of memory: our problem, not the student's.
+            raise SandboxError("javac ran out of memory")
+        return result
+
     def preview_run(
         self,
         source_code: str,
@@ -323,20 +340,11 @@ class JudgeExecutor:
             _restrict_workspace(workspace)
             (workspace / "Solution.java").write_text(source_code, encoding="utf-8")
 
-            compile_result = self._run_container(
-                host_workspace=host_workspace,
-                command=["javac", "Solution.java"],
-                time_limit_s=settings.JUDGE_COMPILE_TIMEOUT_S,
-                memory_limit_mb=memory_limit_mb,
-                stdin_data=None,
-                work_writable=True,
-            )
+            compile_result = self._compile(host_workspace)
             if compile_result.timed_out:
                 # javac on a normal-sized source never takes this long; it
                 # means the host is overloaded, so retry rather than blame.
                 raise SandboxError("Compilation timed out")
-            if compile_result.exit_code is None:
-                raise SandboxError("Compiler container exited without a status")
             if compile_result.exit_code not in (0,):
                 err = (compile_result.stderr or compile_result.stdout).strip()
                 return {

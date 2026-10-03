@@ -74,6 +74,13 @@ class ClarificationTests(APITestCase):
         for user in (self.alice, self.bob):
             self.assertEqual([c["answer"] for c in self._seen(user)], ["Sample 2 was fixed."])
 
+    def test_announcements_cannot_be_answered_away(self):
+        self._as(self.admin)
+        item = self.client.post(self.url, {"answer": "Sample 2 was fixed."}, format="json").data
+        resp = self.client.post(f"{self.url}{item['id']}/answer/", {"answer": "edit"}, format="json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual([c["answer"] for c in self._seen(self.alice)], ["Sample 2 was fixed."])
+
     def test_who_may_ask(self):
         self.assertEqual(self._ask(self.outsider).status_code, 400)  # not registered
         self.assertEqual(self._ask(self.alice, question="  ").status_code, 400)

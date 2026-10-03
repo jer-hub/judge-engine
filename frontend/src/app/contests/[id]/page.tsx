@@ -63,10 +63,15 @@ export default function ContestDetailPage() {
             type="button"
             onClick={() => register.mutate()}
             disabled={register.isPending}
-            className="rounded-sm bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500"
+            className="cursor-pointer rounded-sm bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Register
+            {register.isPending ? "Registering…" : "Register"}
           </button>
+        )}
+        {register.isError && (
+          <span role="alert" className="self-center text-sm text-red-300">
+            {(register.error as Error).message || "Could not register."}
+          </span>
         )}
         {data.is_registered && (
           <span className="rounded-sm bg-slate-800 px-3 py-2 text-sm text-emerald-300">

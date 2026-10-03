@@ -199,6 +199,9 @@ class UserViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
                 },
                 status=status.HTTP_409_CONFLICT,
             )
+        # End their sessions first: a refresh token for a deleted user would
+        # otherwise fail the user lookup on every request.
+        revoke_user_sessions(user)
         return super().destroy(request, *args, **kwargs)
 
     @action(detail=False, methods=["post"], url_path="bulk-reset-password")
@@ -282,7 +285,7 @@ class UserViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
 
         from .tasks import import_users_task
 
-        async_result = import_users_task.delay(csv_text=csv_text)
+        async_result = import_users_task.delay(csv_text=csv_text, actor_id=request.user.id)
         _redis_client().setex(
             _import_owner_key(async_result.id), IMPORT_OWNER_TTL_SECONDS, request.user.id
         )

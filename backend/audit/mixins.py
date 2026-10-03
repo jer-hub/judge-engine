@@ -43,6 +43,9 @@ class AuditedViewSetMixin:
             return
         name = self.audit_name or getattr(self, "basename", "") or type(self).__name__
         action = f"{name}.{getattr(self, 'action', None) or request.method.lower()}"
+        body = request.data if hasattr(request.data, "keys") else {}
+        if body.get("dry_run") is True:
+            action += ".dry_run"  # a preview changed nothing
         key = kwargs.get("pk") or kwargs.get("slug") or ""
         label = getattr(self, "_audit_label", "")
         data = response.data if isinstance(getattr(response, "data", None), dict) else {}
@@ -51,7 +54,6 @@ class AuditedViewSetMixin:
         target = f"{name}:{key}" if key else name
         if label:
             target = f"{target} ({label})"
-        body = request.data if hasattr(request.data, "keys") else {}
         AuditEvent.objects.create(
             actor=user,
             actor_username=user.username,

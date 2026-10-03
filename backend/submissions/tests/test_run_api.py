@@ -60,7 +60,7 @@ class RunPreviewApiTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
 
     def _queue(self):
-        with patch("judge.tasks.preview_run.delay") as mocked:
+        with patch("judge.tasks.preview_run.apply_async") as mocked:
             mocked.return_value.id = "task-123"
             resp = self.client.post(
                 reverse("run-preview"),
@@ -73,6 +73,8 @@ class RunPreviewApiTests(APITestCase):
                 format="json",
             )
         mocked.assert_called_once()
+        # A preview nobody waits for any more is dropped, not run.
+        self.assertTrue(mocked.call_args.kwargs.get("expires"))
         return resp
 
     def test_run_preview_queues_without_blocking(self):

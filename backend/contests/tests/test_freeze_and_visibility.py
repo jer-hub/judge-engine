@@ -116,6 +116,12 @@ class UpcomingContestVisibilityTests(APITestCase):
         self.assertEqual(resp.data["problems"], [])
         self.assertNotIn("Secret Graph Problem", resp.content.decode())
 
+    def test_scoreboard_hides_roster_before_start(self):
+        ContestParticipant.objects.create(contest=self.contest, user=self.admin)
+        with _no_cache():
+            resp = self._get(self.student, f"/api/contests/{self.contest.id}/scoreboard/")
+        self.assertEqual(resp.data["standings"], [])
+
     def test_admin_still_sees_problems(self):
         resp = self._get(self.admin, f"/api/contests/{self.contest.id}/")
         self.assertEqual(len(resp.data["problems"]), 1)

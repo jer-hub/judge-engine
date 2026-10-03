@@ -35,7 +35,8 @@ export async function downloadStandingsCsv(contestId: number, section?: string) 
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Revoking right after click() can cancel the download in some browsers.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export function djangoAdminUrl(path = "") {

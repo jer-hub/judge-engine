@@ -34,7 +34,9 @@ function downloadCsv(rows: ResetRow[], section: string) {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  // Revoking right after click() can cancel the download in some browsers,
+  // and these one-time passwords cannot be fetched again.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** Reset every student in a class section to a new random password. The

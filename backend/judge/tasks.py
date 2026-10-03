@@ -118,6 +118,14 @@ def _record_outcome(
     return True
 
 
+@shared_task
+def enqueue_judging_many(submission_ids: list[int]) -> int:
+    """Queue a large rejudge batch outside the web request."""
+    for submission_id in submission_ids:
+        enqueue_judging(submission_id)
+    return len(submission_ids)
+
+
 @shared_task(
     bind=True,
     max_retries=2,
@@ -288,7 +296,20 @@ def recover_stuck_submissions() -> dict:
     return {"requeued": requeue, "orphans_removed": removed}
 
 
-@shared_task(bind=True, max_retries=1, default_retry_delay=3)
+# One compile plus one run at the longest wall limit, with headroom. Without
+# a limit a stuck preview holds a preview worker indefinitely.
+PREVIEW_SOFT_LIMIT_S = (
+    settings.JUDGE_COMPILE_TIMEOUT_S + 30 * settings.JUDGE_WALL_TIMEOUT_MULTIPLIER + 30
+)
+
+
+@shared_task(
+    bind=True,
+    max_retries=1,
+    default_retry_delay=3,
+    soft_time_limit=PREVIEW_SOFT_LIMIT_S,
+    time_limit=PREVIEW_SOFT_LIMIT_S + 30,
+)
 def preview_run(
     self,
     source_code: str,
@@ -309,6 +330,14 @@ def preview_run(
         )
         logger.info("Preview run status=%s time_ms=%s", result.get("status"), result.get("execution_time_ms"))
         return result
+    except SoftTimeLimitExceeded:
+        return {
+            "status": "TimeLimitExceeded",
+            "compile_error": "",
+            "stdout": "",
+            "stderr": "The run took too long and was stopped.",
+            "execution_time_ms": None,
+        }
     except Exception as exc:
         logger.exception("Preview run failed: %s", exc)
         # See judge_submission: retry() re-raises `exc` once retries run out.

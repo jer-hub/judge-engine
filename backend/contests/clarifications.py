@@ -107,6 +107,11 @@ def announce(contest: Contest, admin, data) -> Clarification:
 
 
 def answer(clarification: Clarification, admin, data) -> Clarification:
+    if clarification.is_announcement:
+        # Answering would default is_public to False and hide it from everyone.
+        raise serializers.ValidationError(
+            {"detail": "Announcements cannot be answered; post a new announcement instead."}
+        )
     text = _text(data, "answer")
     is_public = data.get("is_public", False)
     if not isinstance(is_public, bool):

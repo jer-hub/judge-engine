@@ -24,9 +24,13 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
-      const data = await res.json();
+      // A proxy error page (502 while the server restarts) is not JSON.
+      const data = await res.json().catch(() => null);
       if (!res.ok) {
-        setError(data.detail || "Login failed");
+        setError(
+          data?.detail ||
+            (res.status >= 500 ? "The server is unavailable. Try again shortly." : "Login failed"),
+        );
         return;
       }
       // The NavBar stays mounted across navigation and has a cached 401 for

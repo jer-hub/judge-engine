@@ -1,7 +1,9 @@
+from django.contrib.auth.signals import user_logged_in
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import AllowAny
 from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.exceptions import InvalidToken
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 
 class LoginRateThrottle(AnonRateThrottle):
@@ -73,15 +75,37 @@ class ThrottledTokenObtainPairView(TokenObtainPairView):
 
     def post(self, request, *args, **kwargs):
         try:
-            return super().post(request, *args, **kwargs)
+            response = super().post(request, *args, **kwargs)
         except AuthenticationFailed:
             for throttle in self._throttles:
                 if isinstance(throttle, LoginUsernameRateThrottle):
                     throttle.record_failure()
             raise
+        if response.status_code == 200:
+            # simplejwt sends no login signal; send it like Django's login()
+            # does (updates last_login, records teacher sign-ins in the audit).
+            from accounts.models import User
+
+            user = User.objects.filter(username=request.data.get("username")).first()
+            if user is not None:
+                user_logged_in.send(sender=User, request=request, user=user)
+        return response
 
     def get_throttles(self):
         # Keep the instances check_throttles() used, so post() can record
         # the failure on the same history it checked.
         self._throttles = super().get_throttles()
         return self._throttles
+
+
+class SafeTokenRefreshView(TokenRefreshView):
+    """simplejwt looks the user up with .get() and lets DoesNotExist escape
+    as a 500 when the account was deleted; that is just an invalid token."""
+
+    def post(self, request, *args, **kwargs):
+        from accounts.models import User
+
+        try:
+            return super().post(request, *args, **kwargs)
+        except User.DoesNotExist as exc:
+            raise InvalidToken("User no longer exists.") from exc
