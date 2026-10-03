@@ -151,7 +151,17 @@ services:
       context: ./frontend
       target: dev
     logging: *default-logging
-    command: npm run dev -- --hostname 0.0.0.0 --port 3000
+    # node_modules lives in a named volume, which an image rebuild does not
+    # refresh. Reinstall whenever package-lock.json differs from the one the
+    # volume was last installed from, so a pulled dependency change (e.g. the
+    # Tailwind 4 upgrade) needs no manual step.
+    command: >
+      sh -c "if ! cmp -s package-lock.json node_modules/.installed-package-lock.json; then
+               echo 'package-lock.json changed: running npm ci' &&
+               npm ci --no-audit --no-fund &&
+               cp package-lock.json node_modules/.installed-package-lock.json;
+             fi &&
+             npm run dev -- --hostname 0.0.0.0 --port 3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       INTERNAL_API_URL: http://backend:8000

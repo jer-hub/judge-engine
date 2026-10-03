@@ -58,6 +58,8 @@ Be respectful and constructive. We're building tools for educators and students.
    - Backend/Admin: http://localhost:8000/admin
    - Credentials: `admin` / `JudgeDev-Admin-ChangeMe!` (change this in `.env`)
 
+After pulling a change to `frontend/package-lock.json`, just restart the frontend (`docker compose up -d frontend`): it reinstalls its packages on start whenever the lockfile changed, so the first start after such a pull takes a minute longer.
+
 ### Frontend-Only Development
 
 If you want to work on the frontend without running the full stack:
