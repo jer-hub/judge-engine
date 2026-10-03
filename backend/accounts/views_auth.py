@@ -1,3 +1,4 @@
+from django.contrib.auth.signals import user_logged_in
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import AllowAny
 from rest_framework.throttling import AnonRateThrottle, SimpleRateThrottle
@@ -74,12 +75,21 @@ class ThrottledTokenObtainPairView(TokenObtainPairView):
 
     def post(self, request, *args, **kwargs):
         try:
-            return super().post(request, *args, **kwargs)
+            response = super().post(request, *args, **kwargs)
         except AuthenticationFailed:
             for throttle in self._throttles:
                 if isinstance(throttle, LoginUsernameRateThrottle):
                     throttle.record_failure()
             raise
+        if response.status_code == 200:
+            # simplejwt sends no login signal; send it like Django's login()
+            # does (updates last_login, records teacher sign-ins in the audit).
+            from accounts.models import User
+
+            user = User.objects.filter(username=request.data.get("username")).first()
+            if user is not None:
+                user_logged_in.send(sender=User, request=request, user=user)
+        return response
 
     def get_throttles(self):
         # Keep the instances check_throttles() used, so post() can record
