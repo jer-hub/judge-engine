@@ -359,6 +359,7 @@ export function AccountsPanel() {
         body={`Permanently delete “${deleteFor?.username ?? ""}”? Accounts with submissions can't be deleted; disable them instead to keep contest results.`}
         confirmLabel="Delete"
         danger
+        busy={deleteMutation.isPending}
         onCancel={() => setDeleteFor(null)}
         onConfirm={() => deleteFor && deleteMutation.mutate(deleteFor)}
       />

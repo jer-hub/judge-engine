@@ -58,9 +58,12 @@ def _record_outcome(
     """Write the verdict if this task still holds the claim.
 
     Returns False, writing nothing, when the claim was lost meanwhile (the
-    submission was rejudged or recovered by the sweep).
+    submission was rejudged or recovered by the sweep). Also returns False,
+    re-queueing the submission, when one of its test cases was deleted while
+    it was judged: the verdict was for tests the problem no longer has.
     """
     from contests.scoreboard import invalidate_scoreboard_cache
+    from problems.models import TestCase
     from submissions.models import Submission, SubmissionResult
 
     with transaction.atomic():
@@ -71,6 +74,22 @@ def _record_outcome(
         )
         if submission is None:
             logger.warning("Submission %s: claim lost, discarding stale verdict", submission_id)
+            return False
+        case_ids = {item["test_case_id"] for item in results or []}
+        # Lock the cases so they cannot be deleted before this commits.
+        existing = set(
+            TestCase.objects.select_for_update()
+            .filter(id__in=case_ids)
+            .values_list("id", flat=True)
+        )
+        if existing != case_ids:
+            logger.warning(
+                "Submission %s: test cases changed while judging; re-queueing", submission_id
+            )
+            Submission.objects.filter(pk=submission_id).update(
+                status=Submission.Status.PENDING, judge_claim=None, judging_started_at=None
+            )
+            transaction.on_commit(lambda: enqueue_judging(submission_id))
             return False
         SubmissionResult.objects.filter(submission=submission).delete()
         SubmissionResult.objects.bulk_create(

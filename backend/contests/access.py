@@ -57,6 +57,16 @@ def practice_problem_ids(user):
     )
 
 
+def running_contest_with_problem(user, problem) -> Contest | None:
+    """A contest running for the user (extension included) that includes
+    this problem, or None. Outside the contest a verdict on it would be a
+    penalty-free test of a contest solution."""
+    contest_ids = _active_participations(user).values_list("contest_id", flat=True)
+    return Contest.objects.filter(
+        pk__in=contest_ids, contest_problems__problem=problem
+    ).first()
+
+
 def user_can_practice_problem(user, problem) -> bool:
     """True if the user may submit this unpublished problem as practice."""
     return practice_problem_ids(user).filter(problem_id=problem.pk).exists()
