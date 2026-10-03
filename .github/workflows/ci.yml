@@ -85,7 +85,8 @@ jobs:
       - name: Unit tests (proxy/auth helpers, middleware)
         run: npm test
       - name: Known vulnerabilities (high and above)
-        run: npm audit --audit-level=high
+        # npm audit --audit-level=high, minus reviewed, expiring exceptions.
+        run: node scripts/audit.mjs
       - run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"

@@ -71,6 +71,18 @@ class HoldResultsTests(ContestTestBase):
         self.assertFalse(contest.is_frozen)
         self.assertEqual(self._solved(contest), {"alice": 1, "bob": 1})
 
+    def test_freeze_holds_while_a_time_extension_runs(self):
+        contest = self._ended_contest()
+        participant = ContestParticipant.objects.get(contest=contest, user=self.alice)
+        participant.extra_minutes = 30  # alice is still competing
+        participant.save()
+        self.assertTrue(contest.is_frozen)
+        self.assertEqual(self._solved(contest), {"alice": 1, "bob": 0})
+        # Once the longest extension is over, the freeze lifts.
+        participant.extra_minutes = 3
+        participant.save()
+        self.assertFalse(contest.is_frozen)
+
     def test_held_results_stay_frozen_until_revealed(self):
         contest = self._ended_contest(hold_results_until_revealed=True)
         self.assertTrue(contest.is_frozen)

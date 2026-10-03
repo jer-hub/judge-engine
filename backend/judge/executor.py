@@ -36,6 +36,14 @@ class SandboxError(Exception):
     """
 
 
+class CompileTimeout(Exception):
+    """javac ran past JUDGE_COMPILE_TIMEOUT_S.
+
+    Charged to the submission as a compile error: retrying a source written
+    to make javac slow would only multiply the load on the judge.
+    """
+
+
 def _is_absolute_host_path(path: str) -> bool:
     # The daemon may run on Windows, where os.path.isabs() (Linux rules here)
     # would reject "C:/..." paths.
@@ -180,7 +188,14 @@ class JudgeExecutor:
         time_limit_ms: int,
         memory_limit_mb: int,
         run_all_tests: bool = False,
+        results: list | None = None,
     ) -> dict:
+        """Compile and judge against every test case.
+
+        Per-test results are appended to ``results`` (a fresh list if None) as
+        they finish, so a caller interrupted by the task time limit can still
+        save the tests that ran.
+        """
         self.ensure_image()
         self.data_dir.mkdir(parents=True, exist_ok=True)
         job_id = uuid.uuid4().hex
@@ -200,9 +215,7 @@ class JudgeExecutor:
                 work_writable=True,
             )
             if compile_result.timed_out:
-                # javac on a normal-sized source never takes this long; it
-                # means the host is overloaded, so retry rather than blame.
-                raise SandboxError("Compilation timed out")
+                raise CompileTimeout("Compilation timed out")
             if compile_result.exit_code is None:
                 raise SandboxError("Compiler container exited without a status")
             if compile_result.exit_code not in (0,):
@@ -219,7 +232,8 @@ class JudgeExecutor:
             except OSError:
                 pass
 
-            results = []
+            if results is None:
+                results = []
             overall = "Accepted"
             for tc in test_cases:
                 wall = max(

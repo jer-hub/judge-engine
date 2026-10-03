@@ -18,6 +18,14 @@ SYSTEM_ERROR_MESSAGE = (
     "Judging failed because of a server problem, not your code. "
     "It will be re-judged automatically."
 )
+COMPILE_TIMEOUT_MESSAGE = (
+    "Compilation took too long and was stopped. Compile errors carry no "
+    "penalty; simplify the code (e.g. deeply nested generics) and resubmit."
+)
+TASK_TIME_LIMIT_MESSAGE = (
+    "Judging was stopped because the tests together ran past the judge's "
+    "time budget."
+)
 # Automatic re-judges of a SystemError before it is left for an admin.
 MAX_AUTO_REJUDGES = 3
 SYSTEM_ERROR_RETRY_AFTER = timedelta(minutes=2)
@@ -99,7 +107,7 @@ def _record_outcome(
     time_limit=settings.JUDGE_TASK_SOFT_LIMIT_S + 60,
 )
 def judge_submission(self, submission_id: int, claim: str | None = None) -> dict:
-    from judge.executor import JudgeExecutor
+    from judge.executor import CompileTimeout, JudgeExecutor
     from submissions.models import Submission
 
     try:
@@ -144,6 +152,7 @@ def judge_submission(self, submission_id: int, claim: str | None = None) -> dict
         )
         return {"status": Submission.Status.SYSTEM_ERROR}
 
+    partial: list[dict] = []
     try:
         executor = JudgeExecutor()
         outcome = executor.judge_submission_source(
@@ -152,11 +161,23 @@ def judge_submission(self, submission_id: int, claim: str | None = None) -> dict
             time_limit_ms=problem.time_limit_ms,
             memory_limit_mb=problem.memory_limit_mb,
             run_all_tests=problem.run_all_tests,
+            results=partial,
         )
     except SoftTimeLimitExceeded:
-        logger.error("Judging submission %s exceeded the task time limit", submission_id)
-        _record_outcome(submission_id, token, Submission.Status.SYSTEM_ERROR, SYSTEM_ERROR_MESSAGE)
-        return {"status": Submission.Status.SYSTEM_ERROR, "error": "timeout"}
+        # The student's runs used up the budget (tests x wall limit): a time
+        # limit verdict, not SystemError, so the sweep does not re-run it.
+        logger.warning("Judging submission %s exceeded the task time limit", submission_id)
+        _record_outcome(
+            submission_id, token, Submission.Status.TIME_LIMIT_EXCEEDED,
+            TASK_TIME_LIMIT_MESSAGE, partial,
+        )
+        return {"status": Submission.Status.TIME_LIMIT_EXCEEDED, "error": "timeout"}
+    except CompileTimeout:
+        logger.warning("Submission %s: compilation timed out", submission_id)
+        _record_outcome(
+            submission_id, token, Submission.Status.COMPILE_ERROR, COMPILE_TIMEOUT_MESSAGE,
+        )
+        return {"status": Submission.Status.COMPILE_ERROR, "error": "compile_timeout"}
     except Exception as exc:
         logger.exception("Judge failed for submission %s: %s", submission_id, exc)
         # Once retries run out Celery re-raises `exc` itself, not

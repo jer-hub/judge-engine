@@ -8,10 +8,12 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from judge.executor import SandboxError
+from judge.executor import CompileTimeout, SandboxError
 from judge.tasks import (
+    COMPILE_TIMEOUT_MESSAGE,
     MAX_AUTO_REJUDGES,
     SYSTEM_ERROR_MESSAGE,
+    TASK_TIME_LIMIT_MESSAGE,
     _record_outcome,
     enqueue_judging,
     judge_submission,
@@ -79,12 +81,35 @@ class JudgeTaskTests(TestCase):
         self.assertEqual(sub.status, Submission.Status.SYSTEM_ERROR)
         executor_cls.assert_not_called()
 
-    def test_task_time_limit_is_system_error(self, executor_cls):
-        executor_cls.return_value.judge_submission_source.side_effect = SoftTimeLimitExceeded()
+    def test_task_time_limit_is_tle_with_partial_results(self, executor_cls):
+        sub = _submission()
+        case = sub.problem.test_cases.get()
+
+        def run_one_test_then_time_out(**kwargs):
+            kwargs["results"].append(
+                {"test_case_id": case.id, "verdict": "TimeLimitExceeded", "execution_time_ms": None}
+            )
+            raise SoftTimeLimitExceeded()
+
+        executor_cls.return_value.judge_submission_source.side_effect = run_one_test_then_time_out
+        judge_submission.apply(args=[sub.id]).get()
+        sub.refresh_from_db()
+        self.assertEqual(sub.status, Submission.Status.TIME_LIMIT_EXCEEDED)
+        self.assertEqual(sub.compile_error, TASK_TIME_LIMIT_MESSAGE)
+        self.assertEqual(sub.results.count(), 1)
+        # The student's verdict, not an infrastructure failure: never re-run.
+        with patch("judge.tasks.judge_submission.delay") as delay:
+            recover_stuck_submissions()
+        delay.assert_not_called()
+
+    def test_compile_timeout_is_compile_error_without_retry(self, executor_cls):
+        executor_cls.return_value.judge_submission_source.side_effect = CompileTimeout()
         sub = _submission()
         judge_submission.apply(args=[sub.id]).get()
         sub.refresh_from_db()
-        self.assertEqual(sub.status, Submission.Status.SYSTEM_ERROR)
+        self.assertEqual(sub.status, Submission.Status.COMPILE_ERROR)
+        self.assertEqual(sub.compile_error, COMPILE_TIMEOUT_MESSAGE)
+        self.assertEqual(executor_cls.return_value.judge_submission_source.call_count, 1)
 
     def test_rejudge_during_judging_discards_the_old_verdict(self, executor_cls):
         sub = _submission()

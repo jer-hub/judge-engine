@@ -5,8 +5,9 @@
 {$SITE_ADDRESS:localhost} {
 	encode gzip
 
-	# Django admin and its static assets (served by WhiteNoise).
-	@django path /admin /admin/* /static/*
+	# Django admin and its static assets (served by WhiteNoise). Bare /admin
+	# (no slash) is the Next.js admin dashboard, so match only /admin/*.
+	@django path /admin/* /static/*
 	handle @django {
 		reverse_proxy backend:8000
 	}
