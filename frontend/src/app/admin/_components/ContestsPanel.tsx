@@ -139,7 +139,7 @@ export function ContestsPanel() {
           <label className="block text-sm sm:col-span-2">
             <span className="mb-1 block text-slate-400">Title</span>
             <input
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.title}
               onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
               required
@@ -148,7 +148,7 @@ export function ContestsPanel() {
           <label className="block text-sm sm:col-span-2">
             <span className="mb-1 block text-slate-400">Description</span>
             <textarea
-              className="min-h-[80px] w-full rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+              className="min-h-[80px] w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
               value={form.description}
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, description: e.target.value }))
@@ -159,7 +159,7 @@ export function ContestsPanel() {
             <span className="mb-1 block text-slate-400">Start</span>
             <input
               type="datetime-local"
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.start_time}
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, start_time: e.target.value }))
@@ -171,7 +171,7 @@ export function ContestsPanel() {
             <span className="mb-1 block text-slate-400">End</span>
             <input
               type="datetime-local"
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.end_time}
               onChange={(e) => setForm((prev) => ({ ...prev, end_time: e.target.value }))}
               required
@@ -182,7 +182,7 @@ export function ContestsPanel() {
             <input
               type="number"
               min={0}
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.freeze_scoreboard_minutes_before_end}
               onChange={(e) =>
                 setForm((prev) => ({
@@ -247,7 +247,7 @@ export function ContestsPanel() {
                 </td>
                 <td className="px-4 py-3">
                   <span
-                    className={`rounded px-2 py-1 text-xs font-semibold uppercase ${statusTone(c.status)}`}
+                    className={`rounded-sm px-2 py-1 text-xs font-semibold uppercase ${statusTone(c.status)}`}
                   >
                     {c.status}
                   </span>

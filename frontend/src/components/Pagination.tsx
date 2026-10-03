@@ -27,7 +27,7 @@ export function Pagination({ page, pageSize, count, onPageChange }: Props) {
           type="button"
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
-          className="cursor-pointer rounded border border-slate-700 px-3 py-1.5 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+          className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1.5 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Previous
         </button>
@@ -38,7 +38,7 @@ export function Pagination({ page, pageSize, count, onPageChange }: Props) {
           type="button"
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
-          className="cursor-pointer rounded border border-slate-700 px-3 py-1.5 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+          className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1.5 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Next
         </button>

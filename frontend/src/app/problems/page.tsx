@@ -58,14 +58,14 @@ export default function ProblemsPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <input
-            className="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+            className="rounded-sm border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
             placeholder="Search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search problems"
           />
           <select
-            className="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+            className="rounded-sm border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
             value={difficulty}
             onChange={(e) => setDifficulty(e.target.value)}
           >
@@ -75,7 +75,7 @@ export default function ProblemsPage() {
             <option value="hard">Hard</option>
           </select>
           <input
-            className="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+            className="rounded-sm border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
             placeholder="Tag (e.g. math or math,dp)"
             value={tag}
             onChange={(e) => setTag(e.target.value)}

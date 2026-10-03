@@ -63,24 +63,24 @@ export default function ContestDetailPage() {
             type="button"
             onClick={() => register.mutate()}
             disabled={register.isPending}
-            className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500"
+            className="rounded-sm bg-emerald-600 px-4 py-2 text-sm font-medium hover:bg-emerald-500"
           >
             Register
           </button>
         )}
         {data.is_registered && (
-          <span className="rounded bg-slate-800 px-3 py-2 text-sm text-emerald-300">
+          <span className="rounded-sm bg-slate-800 px-3 py-2 text-sm text-emerald-300">
             Registered
           </span>
         )}
         {extraMinutes > 0 && (
-          <span className="rounded bg-sky-950/60 px-3 py-2 text-sm text-sky-200">
+          <span className="rounded-sm bg-sky-950/60 px-3 py-2 text-sm text-sky-200">
             You have {extraMinutes} extra minute{extraMinutes === 1 ? "" : "s"}
           </span>
         )}
         <Link
           href={`/contests/${id}/scoreboard`}
-          className="rounded border border-slate-700 px-4 py-2 text-sm hover:bg-slate-900"
+          className="rounded-sm border border-slate-700 px-4 py-2 text-sm hover:bg-slate-900"
         >
           Scoreboard
         </Link>

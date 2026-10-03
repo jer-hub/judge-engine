@@ -25,7 +25,7 @@ function errorText(err: Error) {
   return err instanceof ApiError ? formatApiErrorPayload(err.payload, err.message) : err.message;
 }
 
-const inputClass = "w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-xs";
+const inputClass = "w-full rounded-sm border border-slate-700 bg-slate-900 px-2 py-1 text-xs";
 
 /** One roster row: view, inline edit, enable/disable, reset, delete. */
 export function AccountRow({ user, onResetPassword, onDelete, isSelf = false }: Props) {

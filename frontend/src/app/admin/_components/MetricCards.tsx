@@ -20,7 +20,7 @@ export function MetricCards({ metrics }: { metrics: Metric[] }) {
       {metrics.map((m) => (
         <div
           key={m.label}
-          className="rounded-xl border border-[var(--admin-border)] bg-[var(--admin-card)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md"
+          className="rounded-xl border border-(--admin-border) bg-(--admin-card) p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] backdrop-blur-md"
         >
           <div className="mb-3 flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wide text-slate-400">

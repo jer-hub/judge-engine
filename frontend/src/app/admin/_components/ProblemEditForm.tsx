@@ -98,7 +98,7 @@ export function ProblemEditForm({ slug, onClose }: Props) {
       <label className="block text-sm sm:col-span-2">
         <span className="mb-1 block text-slate-400">Title</span>
         <input
-          className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+          className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
           value={form.title}
           onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
           required
@@ -117,7 +117,7 @@ export function ProblemEditForm({ slug, onClose }: Props) {
       <label className="block text-sm">
         <span className="mb-1 block text-slate-400">Difficulty</span>
         <select
-          className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+          className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
           value={form.difficulty}
           onChange={(e) => setForm((p) => ({ ...p, difficulty: e.target.value }))}
         >
@@ -129,7 +129,7 @@ export function ProblemEditForm({ slug, onClose }: Props) {
       <label className="block text-sm">
         <span className="mb-1 block text-slate-400">Tags</span>
         <input
-          className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+          className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
           value={form.tags}
           onChange={(e) => setForm((p) => ({ ...p, tags: e.target.value }))}
         />
@@ -140,7 +140,7 @@ export function ProblemEditForm({ slug, onClose }: Props) {
           type="number"
           min={1000}
           max={30000}
-          className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+          className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
           value={form.time_limit_ms}
           onChange={(e) =>
             setForm((p) => ({ ...p, time_limit_ms: Number(e.target.value) }))
@@ -153,7 +153,7 @@ export function ProblemEditForm({ slug, onClose }: Props) {
           type="number"
           min={96}
           max={2048}
-          className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+          className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
           value={form.memory_limit_mb}
           onChange={(e) =>
             setForm((p) => ({ ...p, memory_limit_mb: Number(e.target.value) }))

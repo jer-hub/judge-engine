@@ -148,7 +148,7 @@ export function AccountsPanel() {
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <input
-            className="rounded border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
+            className="rounded-sm border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
             placeholder="Search username / class / school id"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -195,7 +195,7 @@ export function AccountsPanel() {
           <label className="block text-sm">
             <span className="mb-1 block text-slate-400">Username</span>
             <input
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.username}
               onChange={(e) => setForm((p) => ({ ...p, username: e.target.value }))}
               required
@@ -205,7 +205,7 @@ export function AccountsPanel() {
             <span className="mb-1 block text-slate-400">Password</span>
             <input
               type="password"
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.password}
               onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
               required
@@ -215,7 +215,7 @@ export function AccountsPanel() {
           <label className="block text-sm">
             <span className="mb-1 block text-slate-400">Role</span>
             <select
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.role}
               onChange={(e) =>
                 setForm((p) => ({
@@ -232,7 +232,7 @@ export function AccountsPanel() {
             <span className="mb-1 block text-slate-400">Email</span>
             <input
               type="email"
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.email}
               onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
             />
@@ -240,7 +240,7 @@ export function AccountsPanel() {
           <label className="block text-sm">
             <span className="mb-1 block text-slate-400">School ID</span>
             <input
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.school_id}
               onChange={(e) => setForm((p) => ({ ...p, school_id: e.target.value }))}
             />
@@ -248,7 +248,7 @@ export function AccountsPanel() {
           <label className="block text-sm">
             <span className="mb-1 block text-slate-400">Class section</span>
             <input
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={form.class_section}
               onChange={(e) =>
                 setForm((p) => ({ ...p, class_section: e.target.value }))
@@ -286,7 +286,7 @@ export function AccountsPanel() {
             </span>
             <input
               type="password"
-              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-2"
+              className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               minLength={8}
@@ -295,7 +295,7 @@ export function AccountsPanel() {
           </label>
           <button
             type="submit"
-            className="cursor-pointer rounded bg-amber-500 px-3 py-2 text-sm font-medium text-slate-950 hover:bg-amber-400"
+            className="cursor-pointer rounded-sm bg-amber-500 px-3 py-2 text-sm font-medium text-slate-950 hover:bg-amber-400"
           >
             Reset
           </button>
@@ -305,7 +305,7 @@ export function AccountsPanel() {
               setResetFor(null);
               setNewPassword("");
             }}
-            className="cursor-pointer rounded border border-slate-700 px-3 py-2 text-sm text-slate-300"
+            className="cursor-pointer rounded-sm border border-slate-700 px-3 py-2 text-sm text-slate-300"
           >
             Cancel
           </button>

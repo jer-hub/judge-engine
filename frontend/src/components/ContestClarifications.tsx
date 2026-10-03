@@ -103,14 +103,14 @@ export function ContestClarifications({ contestId, problemLetters, canAsk }: Pro
             maxLength={2000}
             rows={2}
             placeholder="Ask your teacher about a problem statement…"
-            className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            className="w-full rounded-sm border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
           />
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <select
               aria-label="About problem"
               value={letter}
               onChange={(e) => setLetter(e.target.value)}
-              className="rounded border border-slate-700 bg-slate-900 px-2 py-1"
+              className="rounded-sm border border-slate-700 bg-slate-900 px-2 py-1"
             >
               <option value="">General</option>
               {problemLetters.map((l) => (
@@ -123,7 +123,7 @@ export function ContestClarifications({ contestId, problemLetters, canAsk }: Pro
               type="button"
               onClick={() => ask.mutate()}
               disabled={!question.trim() || ask.isPending}
-              className="cursor-pointer rounded bg-emerald-600 px-3 py-1 font-medium hover:bg-emerald-500 disabled:opacity-50"
+              className="cursor-pointer rounded-sm bg-emerald-600 px-3 py-1 font-medium hover:bg-emerald-500 disabled:opacity-50"
             >
               {ask.isPending ? "Sending…" : "Ask"}
             </button>

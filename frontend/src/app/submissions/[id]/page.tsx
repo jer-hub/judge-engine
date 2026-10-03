@@ -79,7 +79,7 @@ export default function SubmissionDetailPage() {
               type="button"
               disabled={rejudge.isPending}
               onClick={() => rejudge.mutate(false)}
-              className="cursor-pointer rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-60"
+              className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-60"
             >
               {rejudge.isPending ? "Rejudging…" : "Rejudge"}
             </button>
@@ -95,7 +95,7 @@ export default function SubmissionDetailPage() {
             <button
               type="button"
               onClick={() => setConfirmForce(true)}
-              className="cursor-pointer rounded border border-red-800 px-3 py-1 text-red-200 hover:bg-red-950/50"
+              className="cursor-pointer rounded-sm border border-red-800 px-3 py-1 text-red-200 hover:bg-red-950/50"
             >
               Force rejudge
             </button>

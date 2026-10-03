@@ -192,7 +192,7 @@ function ProblemDetailInner() {
             <h2 className="text-lg font-medium">Sample tests</h2>
             {problem.sample_tests.map((t) => (
               <div key={t.id} className="grid gap-2 sm:grid-cols-2">
-                <pre className="overflow-x-auto rounded bg-slate-900 p-3 text-xs">
+                <pre className="overflow-x-auto rounded-sm bg-slate-900 p-3 text-xs">
                   <div className="mb-1 flex items-center justify-between text-slate-500">
                     <span>Input</span>
                     <button
@@ -205,7 +205,7 @@ function ProblemDetailInner() {
                   </div>
                   {t.input_data}
                 </pre>
-                <pre className="overflow-x-auto rounded bg-slate-900 p-3 text-xs">
+                <pre className="overflow-x-auto rounded-sm bg-slate-900 p-3 text-xs">
                   <div className="mb-1 flex items-center justify-between text-slate-500">
                     <span>Output</span>
                     <button
@@ -258,7 +258,7 @@ function ProblemDetailInner() {
             type="button"
             onClick={() => run.mutate()}
             disabled={busy}
-            className="rounded border border-slate-600 bg-slate-900 px-4 py-2 font-medium hover:bg-slate-800 disabled:opacity-60"
+            className="rounded-sm border border-slate-600 bg-slate-900 px-4 py-2 font-medium hover:bg-slate-800 disabled:opacity-60"
           >
             {run.isPending ? "Running…" : "Run"}
           </button>
@@ -267,7 +267,7 @@ function ProblemDetailInner() {
             onClick={() => submit.mutate()}
             disabled={submitBlocked}
             title={contestOver ? "This contest is over for you" : undefined}
-            className="rounded bg-emerald-600 px-4 py-2 font-medium hover:bg-emerald-500 disabled:opacity-60"
+            className="rounded-sm bg-emerald-600 px-4 py-2 font-medium hover:bg-emerald-500 disabled:opacity-60"
           >
             {submit.isPending ? "Submitting…" : "Submit Java"}
           </button>
@@ -290,20 +290,20 @@ function ProblemDetailInner() {
               </div>
             </div>
             {runResult.compile_error && (
-              <pre className="overflow-x-auto rounded bg-red-950/40 p-3 text-xs text-red-200">
+              <pre className="overflow-x-auto rounded-sm bg-red-950/40 p-3 text-xs text-red-200">
                 {runResult.compile_error}
               </pre>
             )}
             <div>
               <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">stdout</div>
-              <pre className="max-h-48 overflow-auto rounded bg-slate-950 p-3 text-xs text-emerald-100 whitespace-pre-wrap">
+              <pre className="max-h-48 overflow-auto rounded-sm bg-slate-950 p-3 text-xs text-emerald-100 whitespace-pre-wrap">
                 {runResult.stdout || "(empty)"}
               </pre>
             </div>
             {runResult.stderr && (
               <div>
                 <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">stderr</div>
-                <pre className="max-h-32 overflow-auto rounded bg-slate-950 p-3 text-xs text-amber-100 whitespace-pre-wrap">
+                <pre className="max-h-32 overflow-auto rounded-sm bg-slate-950 p-3 text-xs text-amber-100 whitespace-pre-wrap">
                   {runResult.stderr}
                 </pre>
               </div>

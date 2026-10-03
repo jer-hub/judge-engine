@@ -37,7 +37,7 @@ export function NavBar() {
   if (pathname === "/login") return null;
 
   return (
-    <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur">
+    <header className="border-b border-slate-800 bg-slate-950/80 backdrop-blur-sm">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
         <div className="flex items-center gap-6">
           <Link href="/problems" className="text-lg font-semibold tracking-tight text-emerald-400">
@@ -76,7 +76,7 @@ export function NavBar() {
             <>
               <span>
                 {user.username}
-                <span className="ml-2 rounded bg-slate-800 px-2 py-0.5 text-xs uppercase text-slate-400">
+                <span className="ml-2 rounded-sm bg-slate-800 px-2 py-0.5 text-xs uppercase text-slate-400">
                   {user.role}
                 </span>
               </span>
@@ -93,7 +93,7 @@ export function NavBar() {
               <button
                 type="button"
                 onClick={logout}
-                className="cursor-pointer rounded border border-slate-700 px-3 py-1 transition hover:bg-slate-800"
+                className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 transition hover:bg-slate-800"
               >
                 Log out
               </button>

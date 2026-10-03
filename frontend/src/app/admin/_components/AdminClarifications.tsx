@@ -32,7 +32,7 @@ function AnswerForm({ contestId, item }: { contestId: number; item: Clarificatio
         onChange={(e) => setText(e.target.value)}
         rows={2}
         maxLength={2000}
-        className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+        className="w-full rounded-sm border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
       />
       <div className="flex flex-wrap items-center gap-3 text-xs">
         <label className="flex items-center gap-1.5">
@@ -43,7 +43,7 @@ function AnswerForm({ contestId, item }: { contestId: number; item: Clarificatio
           type="button"
           onClick={() => save.mutate()}
           disabled={!text.trim() || save.isPending}
-          className="cursor-pointer rounded border border-slate-700 px-3 py-1 text-emerald-300 hover:bg-slate-800 disabled:opacity-50"
+          className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-emerald-300 hover:bg-slate-800 disabled:opacity-50"
         >
           {item.answered_at ? "Update answer" : "Answer"}
         </button>
@@ -76,11 +76,11 @@ export function AdminClarifications({ contestId }: { contestId: number }) {
   const waiting = items.filter((c) => !c.answered_at).length;
 
   return (
-    <div className="space-y-3 rounded border border-slate-800 bg-slate-900/40 p-3 text-sm">
+    <div className="space-y-3 rounded-sm border border-slate-800 bg-slate-900/40 p-3 text-sm">
       <p className="text-slate-400">
         Clarifications{" "}
         {waiting > 0 && (
-          <span className="rounded bg-amber-900/50 px-2 py-0.5 text-xs text-amber-200">
+          <span className="rounded-sm bg-amber-900/50 px-2 py-0.5 text-xs text-amber-200">
             {waiting} waiting
           </span>
         )}
@@ -93,13 +93,13 @@ export function AdminClarifications({ contestId }: { contestId: number }) {
           rows={2}
           maxLength={2000}
           placeholder="Announcement to every contestant…"
-          className="min-w-[16rem] flex-1 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+          className="min-w-[16rem] flex-1 rounded-sm border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
         />
         <button
           type="button"
           onClick={() => post.mutate()}
           disabled={!announcement.trim() || post.isPending}
-          className="cursor-pointer rounded border border-slate-700 px-3 py-1 text-xs text-sky-300 hover:bg-slate-800 disabled:opacity-50"
+          className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-xs text-sky-300 hover:bg-slate-800 disabled:opacity-50"
         >
           Announce
         </button>
