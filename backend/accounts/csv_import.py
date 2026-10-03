@@ -32,6 +32,10 @@ def parse_roster_csv(text: str) -> list[ParsedRow]:
         raise ValueError("CSV text is required.")
     if len(text) > MAX_CSV_CHARS:
         raise ValueError(f"CSV is too large (max {MAX_CSV_CHARS} characters).")
+    # PostgreSQL text cannot hold NUL, so a row with one would crash the
+    # import midway. It usually means the file was saved as UTF-16.
+    if "\x00" in text:
+        raise ValueError("CSV contains NUL characters. Save it as CSV (UTF-8) and try again.")
 
     # utf-8-sig strips BOM when present
     stream = io.StringIO(text.lstrip("\ufeff"))

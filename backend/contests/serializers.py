@@ -168,10 +168,19 @@ def sync_contest_problems(contest: Contest, items: list[dict]) -> None:
 
 class ContestWriteSerializer(serializers.ModelSerializer):
     problems = ContestProblemWriteSerializer(many=True, required=False)
+    # The whole roster: anyone not listed is removed. Fine for create; an edit
+    # form should send participants_add/remove instead, or it unregisters
+    # students who self-registered after the form was loaded.
     participant_usernames = serializers.ListField(
         child=serializers.CharField(),
         required=False,
         write_only=True,
+    )
+    participants_add = serializers.ListField(
+        child=serializers.CharField(), required=False, write_only=True
+    )
+    participants_remove = serializers.ListField(
+        child=serializers.CharField(), required=False, write_only=True
     )
 
     class Meta:
@@ -188,6 +197,8 @@ class ContestWriteSerializer(serializers.ModelSerializer):
             "practice_after_end",
             "problems",
             "participant_usernames",
+            "participants_add",
+            "participants_remove",
         )
 
     def validate(self, attrs):
@@ -236,6 +247,8 @@ class ContestWriteSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         problems = validated_data.pop("problems", None)
         usernames = validated_data.pop("participant_usernames", None)
+        to_add = validated_data.pop("participants_add", None)
+        validated_data.pop("participants_remove", None)  # nothing to remove yet
         request = self.context.get("request")
         if request and request.user.is_authenticated:
             validated_data["created_by"] = request.user
@@ -244,12 +257,16 @@ class ContestWriteSerializer(serializers.ModelSerializer):
             sync_contest_problems(contest, problems)
         if usernames is not None:
             self._sync_participants(contest, usernames)
+        if to_add:
+            self._add_participants(contest, to_add)
         return contest
 
     @transaction.atomic
     def update(self, instance, validated_data):
         problems = validated_data.pop("problems", None)
         usernames = validated_data.pop("participant_usernames", None)
+        to_add = validated_data.pop("participants_add", None)
+        to_remove = validated_data.pop("participants_remove", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -257,9 +274,21 @@ class ContestWriteSerializer(serializers.ModelSerializer):
             sync_contest_problems(instance, problems)
         if usernames is not None:
             self._sync_participants(instance, usernames)
+        if to_add:
+            self._add_participants(instance, to_add)
+        if to_remove:
+            names = [u.strip() for u in to_remove if u and u.strip()]
+            ContestParticipant.objects.filter(
+                contest=instance, user__username__in=names
+            ).delete()
         return instance
 
-    def _sync_participants(self, contest: Contest, usernames: list[str]) -> None:
+    @staticmethod
+    def _add_participants(
+        contest: Contest, usernames: list[str], field: str = "participants_add"
+    ) -> list[int]:
+        """Register each user (get_or_create, keeping any time extension);
+        returns the participant ids."""
         from accounts.models import User
 
         names = [u.strip() for u in usernames if u and u.strip()]
@@ -267,15 +296,14 @@ class ContestWriteSerializer(serializers.ModelSerializer):
         found = {u.username for u in users}
         missing = [n for n in names if n not in found]
         if missing:
-            raise serializers.ValidationError(
-                {"participant_usernames": f"Unknown users: {', '.join(missing)}"}
-            )
-        keep_ids = []
-        for user in users:
-            part, _ = ContestParticipant.objects.get_or_create(
-                contest=contest, user=user
-            )
-            keep_ids.append(part.id)
+            raise serializers.ValidationError({field: f"Unknown users: {', '.join(missing)}"})
+        return [
+            ContestParticipant.objects.get_or_create(contest=contest, user=user)[0].id
+            for user in users
+        ]
+
+    def _sync_participants(self, contest: Contest, usernames: list[str]) -> None:
+        keep_ids = self._add_participants(contest, usernames, field="participant_usernames")
         ContestParticipant.objects.filter(contest=contest).exclude(
             id__in=keep_ids
         ).delete()

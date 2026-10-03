@@ -69,11 +69,26 @@ function parseUsernameList(raw: string): string[] {
   return Array.from(new Set(parts));
 }
 
+/** The roster edits made in the form, as the API's add/remove lists. */
+function rosterChanges(saved: string[], current: string[]) {
+  const before = new Set(saved);
+  const after = new Set(current);
+  const add = current.filter((name) => !before.has(name));
+  const remove = saved.filter((name) => !after.has(name));
+  return {
+    ...(add.length > 0 && { participants_add: add }),
+    ...(remove.length > 0 && { participants_remove: remove }),
+  };
+}
+
 export function ContestEditor({ contestId, onClose }: Props) {
   const queryClient = useQueryClient();
   const rootRef = useRef<HTMLFormElement>(null);
   const closeAfterRef = useRef(false);
   const isDirtyRef = useRef(false);
+  // The roster as last loaded from the server. Saves send only the changes
+  // against it, so students who self-register meanwhile are not removed.
+  const savedParticipantsRef = useRef<string[]>([]);
   const savedMsgTimerRef = useRef<number | null>(null);
   const [pendingClose, setPendingClose] = useState(false);
 
@@ -132,7 +147,9 @@ export function ContestEditor({ contestId, onClose }: Props) {
         })),
       ),
     );
-    setParticipantSet((c.participants ?? []).map((p) => p.username));
+    const saved = (c.participants ?? []).map((p) => p.username);
+    savedParticipantsRef.current = saved;
+    setParticipantSet(saved);
     setError(null);
   }
 
@@ -200,11 +217,16 @@ export function ContestEditor({ contestId, onClose }: Props) {
     },
   });
 
-  const unknownParticipants = useMemo(
-    () =>
-      participantSet.filter((name) => !rosterUsernames.has(name.toLowerCase())),
-    [participantSet, rosterUsernames],
-  );
+  // Only names added in this form can be unknown: saved participants exist.
+  // Until the roster loads nothing is flagged; the server validates anyway.
+  const unknownParticipants = useMemo(() => {
+    if (!roster.isSuccess) return [];
+    const saved = new Set(savedParticipantsRef.current);
+    return participantSet.filter(
+      (name) => !saved.has(name) && !rosterUsernames.has(name.toLowerCase()),
+    );
+  }, [participantSet, rosterUsernames, roster.isSuccess]);
+  const unknownSet = useMemo(() => new Set(unknownParticipants), [unknownParticipants]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -220,7 +242,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
           hold_results_until_revealed: holdResults,
           practice_after_end: practiceAfterEnd,
           problems: withLetters(problems),
-          participant_usernames: participantSet,
+          ...rosterChanges(savedParticipantsRef.current, participantSet),
         }),
       }),
     onSuccess: (data) => {
@@ -423,6 +445,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
         title="Rejudge this contest?"
         body={`Re-judge every finished submission in “${displayTitle}” against the current test cases. Verdicts and the scoreboard may change.`}
         confirmLabel="Rejudge"
+        busy={rejudgeMutation.isPending}
         onCancel={() => setConfirmRejudge(false)}
         onConfirm={() => rejudgeMutation.mutate()}
       />
@@ -710,7 +733,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
         {participantSet.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5">
             {participantSet.map((name) => {
-              const unknown = !rosterUsernames.has(name.toLowerCase());
+              const unknown = unknownSet.has(name);
               return (
                 <button
                   key={name}

@@ -144,6 +144,7 @@ export function BulkPasswordReset() {
         body={`Every student in section “${section.trim()}” gets a new random password and is signed out. Their current passwords stop working.`}
         confirmLabel="Reset passwords"
         danger
+        busy={reset.isPending}
         onCancel={() => setConfirming(false)}
         onConfirm={() => reset.mutate()}
       />

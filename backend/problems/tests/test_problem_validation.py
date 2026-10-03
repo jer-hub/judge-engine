@@ -157,3 +157,68 @@ class ProblemValidationApiTests(APITestCase):
         slugs = {r["slug"] for r in resp.data["results"]}
         self.assertIn("both-tags", slugs)
         self.assertNotIn("math-only-2", slugs)
+
+
+class JudgeBudgetTests(APITestCase):
+    """Worst-case judging time (tests x wall limit) must fit the task budget."""
+
+    def setUp(self):
+        admin = User.objects.create_user(
+            username="admin_budget", password="pass12345", role=User.Role.ADMIN
+        )
+        token = RefreshToken.for_user(admin).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+    @staticmethod
+    def _cases(n):
+        return [
+            {"order": i, "input_data": "1\n", "expected_output": "1\n", "points": 1}
+            for i in range(n)
+        ]
+
+    def _create(self, time_limit_ms, n):
+        return self.client.post(
+            reverse("problem-list"),
+            {"title": f"Budget {time_limit_ms} {n}", "statement": "s",
+             "time_limit_ms": time_limit_ms, "test_cases": self._cases(n)},
+            format="json",
+        )
+
+    def test_too_many_slow_tests_rejected(self):
+        resp = self._create(30_000, 20)
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("test_cases", resp.data)
+
+    def test_within_budget_accepted(self):
+        self.assertEqual(self._create(2000, 20).status_code, status.HTTP_201_CREATED)
+
+    def test_raising_time_limit_past_budget_rejected(self):
+        problem = Problem.objects.create(title="Raise", slug="raise", statement="s")
+        for i in range(20):
+            ProblemTestCase.objects.create(problem=problem, order=i, input_data="", expected_output="")
+        resp = self.client.patch(
+            reverse("problem-detail", kwargs={"slug": "raise"}),
+            {"time_limit_ms": 30_000}, format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("time_limit_ms", resp.data)
+        # An unrelated edit to the same problem is not refused.
+        Problem.objects.filter(pk=problem.pk).update(time_limit_ms=30_000)
+        resp = self.client.patch(
+            reverse("problem-detail", kwargs={"slug": "raise"}),
+            {"title": "Renamed"}, format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+
+    def test_adding_a_case_past_budget_rejected(self):
+        problem = Problem.objects.create(
+            title="Add", slug="add", statement="s", time_limit_ms=30_000
+        )
+        for i in range(5):
+            ProblemTestCase.objects.create(problem=problem, order=i, input_data="", expected_output="")
+        resp = self.client.post(
+            reverse("testcase-list"),
+            {"problem": problem.id, "order": 9, "input_data": "", "expected_output": ""},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)

@@ -72,3 +72,32 @@ class PracticeAfterEndTests(APITestCase):
     def test_stays_closed_while_a_time_extension_runs(self):
         ContestParticipant.objects.create(contest=self.past, user=self.bob, extra_minutes=90)
         self.assertEqual(self._practice(self.alice)[1], 400)
+
+
+class PublishedProblemInRunningContestTests(APITestCase):
+    """A published problem reused in a contest: while the contest runs for a
+    participant, a submission outside it would be a penalty-free test."""
+
+    _contest = PracticeAfterEndTests._contest
+    _as = PracticeAfterEndTests._as
+    _practice = PracticeAfterEndTests._practice
+
+    def setUp(self):
+        self.alice = User.objects.create_user(username="alice", password="pass12345")
+        self.bob = User.objects.create_user(username="bob", password="pass12345")
+        self.problem = Problem.objects.create(title="P", slug="p", statement="x", is_published=True)
+        ProblemTestCase.objects.create(problem=self.problem, input_data="", expected_output="1")
+        now = timezone.now()
+        self.live = self._contest(now - timedelta(minutes=30), now + timedelta(minutes=30))
+        ContestParticipant.objects.create(contest=self.live, user=self.alice)
+
+    def test_participant_cannot_submit_outside_the_contest(self):
+        self.assertEqual(self._practice(self.alice), (200, 400))
+
+    def test_non_participant_can_still_practice(self):
+        self.assertEqual(self._practice(self.bob), (200, 201))
+
+    def test_open_again_after_the_participants_window(self):
+        now = timezone.now()
+        Contest.objects.filter(pk=self.live.pk).update(end_time=now - timedelta(minutes=1))
+        self.assertEqual(self._practice(self.alice), (200, 201))

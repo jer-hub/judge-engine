@@ -4,13 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 
-/** Where the middleware sent the user from — local paths only (no open redirect). */
-function safeNextPath(next: string | null) {
-  if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
-    return "/problems";
-  }
-  return next.startsWith("/login") ? "/problems" : next;
-}
+import { safeNextPath } from "@/lib/safe-next";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,7 +32,12 @@ export default function LoginPage() {
       // The NavBar stays mounted across navigation and has a cached 401 for
       // "me" from before login; drop it (and anything else) and refetch.
       await queryClient.resetQueries();
-      router.push(safeNextPath(new URLSearchParams(window.location.search).get("next")));
+      router.push(
+        safeNextPath(
+          new URLSearchParams(window.location.search).get("next"),
+          window.location.origin,
+        ),
+      );
       router.refresh();
     } catch {
       setError("Could not reach the server");

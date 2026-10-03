@@ -58,3 +58,8 @@ class ParseRosterCsvTests(SimpleTestCase):
     def test_rejects_oversized_text(self):
         with self.assertRaises(ValueError):
             parse_roster_csv("x" * 100_001)
+
+    def test_rejects_nul_characters(self):
+        # PostgreSQL rejects NUL in text, which used to 500 the import.
+        with self.assertRaisesMessage(ValueError, "NUL"):
+            parse_roster_csv("username,password\nal\x00ice,Secret-Pass-1\n")

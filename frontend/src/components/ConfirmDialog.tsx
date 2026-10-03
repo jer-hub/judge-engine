@@ -9,6 +9,8 @@ type Props = {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** The confirmed action is running: disable Confirm so it cannot fire twice. */
+  busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 };
@@ -20,21 +22,32 @@ export function ConfirmDialog({
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
   danger = false,
+  busy = false,
   onConfirm,
   onCancel,
 }: Props) {
   const titleId = useId();
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  // Callers pass inline arrows; read the latest through a ref so a parent
+  // re-render does not re-run the effect and steal focus back.
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
 
   useEffect(() => {
     if (!open) return;
-    confirmRef.current?.focus();
+    const previous = document.activeElement as HTMLElement | null;
+    // A destructive action should not be one stray Enter away.
+    (danger ? cancelRef : confirmRef).current?.focus();
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onCancel();
+      if (e.key === "Escape") onCancelRef.current();
     }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onCancel]);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      previous?.focus?.();
+    };
+  }, [open, danger]);
 
   if (!open) return null;
 
@@ -57,6 +70,7 @@ export function ConfirmDialog({
         <p className="mt-2 text-sm text-slate-400">{body}</p>
         <div className="mt-5 flex justify-end gap-2">
           <button
+            ref={cancelRef}
             type="button"
             onClick={onCancel}
             className="cursor-pointer rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:bg-slate-800"
@@ -67,7 +81,9 @@ export function ConfirmDialog({
             ref={confirmRef}
             type="button"
             onClick={onConfirm}
-            className={`cursor-pointer rounded-lg px-3 py-2 text-sm font-medium transition ${
+            disabled={busy}
+            aria-busy={busy}
+            className={`cursor-pointer rounded-lg px-3 py-2 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${
               danger
                 ? "bg-red-600 text-white hover:bg-red-500"
                 : "bg-emerald-500 text-slate-950 hover:bg-emerald-400"

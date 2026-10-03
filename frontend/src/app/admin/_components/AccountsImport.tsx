@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import { formatApiErrorPayload } from "@/lib/admin";
@@ -13,6 +13,13 @@ const SAMPLE_HEADER =
 const MAX_CHARS = 100_000;
 const IMPORT_POLL_INTERVAL_MS = 1500;
 const IMPORT_POLL_TIMEOUT_MS = 10 * 60_000;
+// Consecutive failed status checks (502 while a server restarts, a network
+// blip) tolerated before giving up; the import itself keeps running.
+const IMPORT_POLL_MAX_ERRORS = 5;
+
+function isTransient(err: unknown) {
+  return !(err instanceof ApiError) || err.status >= 500;
+}
 
 type ImportJob = {
   task_id: string;
@@ -29,6 +36,14 @@ export function AccountsImport({ onImported }: Props) {
   const [csvText, setCsvText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<UserImportResult | null>(null);
+  // Admin tabs unmount this panel; stop polling when that happens.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const importMutation = useMutation({
     mutationFn: async (dryRun: boolean) => {
@@ -39,11 +54,18 @@ export function AccountsImport({ onImported }: Props) {
       if (!("task_id" in first)) return first; // dry run answers inline
       // Real imports hash every password server-side and run in the background.
       const deadline = Date.now() + IMPORT_POLL_TIMEOUT_MS;
+      let errors = 0;
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, IMPORT_POLL_INTERVAL_MS));
-        const job = await apiFetch<UserImportResult & ImportJob>(
-          `/users/import/${first.task_id}/`,
-        );
+        if (!mountedRef.current) throw new Error("Import continues in the background.");
+        let job: UserImportResult & ImportJob;
+        try {
+          job = await apiFetch<UserImportResult & ImportJob>(`/users/import/${first.task_id}/`);
+          errors = 0;
+        } catch (err) {
+          if (!isTransient(err) || ++errors >= IMPORT_POLL_MAX_ERRORS) throw err;
+          continue;
+        }
         if (job.status === "Done") return job;
         if (job.status === "Failed") throw new Error(job.detail || "Import failed.");
       }

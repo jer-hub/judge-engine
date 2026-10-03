@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -25,10 +26,24 @@ export function NavBar() {
     retry: false,
   });
 
+  const [logoutError, setLogoutError] = useState(false);
+
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    // Shared lab PCs: leave nothing of this user for the next one.
-    clearAllDrafts();
+    setLogoutError(false);
+    let ok = false;
+    try {
+      ok = (await fetch("/api/auth/logout", { method: "POST" })).ok;
+    } catch {
+      ok = false;
+    } finally {
+      // Shared lab PCs: leave nothing of this user for the next one.
+      clearAllDrafts();
+    }
+    if (!ok) {
+      // The session cookies may still be set: do not look logged out.
+      setLogoutError(true);
+      return;
+    }
     queryClient.clear();
     router.push("/login");
     router.refresh();
@@ -89,6 +104,11 @@ export function NavBar() {
                 >
                   Django
                 </a>
+              )}
+              {logoutError && (
+                <span role="alert" className="text-xs text-red-400">
+                  Logout failed. Try again before leaving this PC.
+                </span>
               )}
               <button
                 type="button"

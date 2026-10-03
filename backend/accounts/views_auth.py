@@ -11,8 +11,10 @@ class LoginRateThrottle(AnonRateThrottle):
 
 
 class LoginUsernameRateThrottle(SimpleRateThrottle):
-    """Per target username, so brute force on one account is capped even when
-    requests come from many IPs (or one spoofed X-Forwarded-For).
+    """Failed logins per target username, across all IPs, so brute force on
+    one account stays capped even from many IPs (or a spoofed
+    X-Forwarded-For). Looser than the per-IP cap below, so one attacker
+    cannot lock a classmate out just by typing their username wrong.
 
     Only failed logins count: the view records them via ``record_failure``,
     so a student who signs in successfully again and again is never throttled.
@@ -20,13 +22,16 @@ class LoginUsernameRateThrottle(SimpleRateThrottle):
 
     scope = "login-user"
 
+    def ident(self, request, username: str) -> str:
+        return username
+
     def get_cache_key(self, request, view):
         username = request.data.get("username") if hasattr(request, "data") else None
         if not isinstance(username, str) or not username.strip():
             return None
         return self.cache_format % {
             "scope": self.scope,
-            "ident": username.strip().lower(),
+            "ident": self.ident(request, username.strip().lower()),
         }
 
     def allow_request(self, request, view):
@@ -51,9 +56,20 @@ class LoginUsernameRateThrottle(SimpleRateThrottle):
         self.cache.set(self.key, self.history, self.duration)
 
 
+class LoginUsernameIpRateThrottle(LoginUsernameRateThrottle):
+    """Failed logins per username from one client IP: the tight cap."""
+
+    scope = "login-user-ip"
+
+    def ident(self, request, username: str) -> str:
+        return f"{username}|{self.get_ident(request)}"
+
+
 class ThrottledTokenObtainPairView(TokenObtainPairView):
     permission_classes = [AllowAny]
-    throttle_classes = [LoginRateThrottle, LoginUsernameRateThrottle]
+    throttle_classes = [
+        LoginRateThrottle, LoginUsernameIpRateThrottle, LoginUsernameRateThrottle,
+    ]
 
     def post(self, request, *args, **kwargs):
         try:

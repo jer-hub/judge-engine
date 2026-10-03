@@ -21,6 +21,8 @@ from docker.types import LogConfig
 logger = logging.getLogger("judge")
 
 OUTPUT_LIMIT_MESSAGE = "Output limit exceeded."
+# How long to wait, after the container exits, for its output to drain.
+PUMP_DRAIN_TIMEOUT_S = 10
 
 # Every sandbox container carries this label so the recovery sweep can find
 # ones orphaned by a worker crash.
@@ -34,6 +36,38 @@ class SandboxError(Exception):
     Raised instead of returning a verdict so the task can retry and, if the
     failure persists, record SystemError rather than charging the student.
     """
+
+
+class CompileTimeout(Exception):
+    """javac ran past JUDGE_COMPILE_TIMEOUT_S.
+
+    Charged to the submission as a compile error: retrying a source written
+    to make javac slow would only multiply the load on the judge.
+    """
+
+
+# The sandbox user: "nobody", which owns nothing on a typical host. uid 1000
+# is usually the host's first login user, so a container escape would land
+# with that user's files (and often the docker group).
+SANDBOX_UID = 65534
+
+
+def _restrict_workspace(workspace: Path) -> None:
+    """Give the job folder to the sandbox user alone (0700).
+
+    Some bind mounts (Docker Desktop's Windows/macOS file sharing) ignore
+    ownership; there the folder falls back to 0777, as before, or javac
+    could not write its class file.
+    """
+    try:
+        os.chown(workspace, SANDBOX_UID, SANDBOX_UID)
+        os.chmod(workspace, 0o700)
+        if workspace.stat().st_uid == SANDBOX_UID:
+            return
+    except OSError:
+        pass
+    logger.warning("Cannot hand %s to the sandbox user; using mode 0777", workspace)
+    os.chmod(workspace, 0o777)
 
 
 def _is_absolute_host_path(path: str) -> bool:
@@ -180,7 +214,14 @@ class JudgeExecutor:
         time_limit_ms: int,
         memory_limit_mb: int,
         run_all_tests: bool = False,
+        results: list | None = None,
     ) -> dict:
+        """Compile and judge against every test case.
+
+        Per-test results are appended to ``results`` (a fresh list if None) as
+        they finish, so a caller interrupted by the task time limit can still
+        save the tests that ran.
+        """
         self.ensure_image()
         self.data_dir.mkdir(parents=True, exist_ok=True)
         job_id = uuid.uuid4().hex
@@ -188,7 +229,7 @@ class JudgeExecutor:
         host_workspace = f"{self.host_data_dir.rstrip('/').rstrip(chr(92))}/{job_id}"
         workspace.mkdir(parents=True, exist_ok=True)
         try:
-            os.chmod(workspace, 0o777)
+            _restrict_workspace(workspace)
             (workspace / "Solution.java").write_text(source_code, encoding="utf-8")
 
             compile_result = self._run_container(
@@ -200,9 +241,7 @@ class JudgeExecutor:
                 work_writable=True,
             )
             if compile_result.timed_out:
-                # javac on a normal-sized source never takes this long; it
-                # means the host is overloaded, so retry rather than blame.
-                raise SandboxError("Compilation timed out")
+                raise CompileTimeout("Compilation timed out")
             if compile_result.exit_code is None:
                 raise SandboxError("Compiler container exited without a status")
             if compile_result.exit_code not in (0,):
@@ -219,7 +258,8 @@ class JudgeExecutor:
             except OSError:
                 pass
 
-            results = []
+            if results is None:
+                results = []
             overall = "Accepted"
             for tc in test_cases:
                 wall = max(
@@ -280,7 +320,7 @@ class JudgeExecutor:
         host_workspace = f"{self.host_data_dir.rstrip('/').rstrip(chr(92))}/{job_id}"
         workspace.mkdir(parents=True, exist_ok=True)
         try:
-            os.chmod(workspace, 0o777)
+            _restrict_workspace(workspace)
             (workspace / "Solution.java").write_text(source_code, encoding="utf-8")
 
             compile_result = self._run_container(
@@ -396,11 +436,14 @@ class JudgeExecutor:
                 log_config=LogConfig(type=LogConfig.types.NONE),
                 cap_drop=["ALL"],
                 security_opt=["no-new-privileges:true"],
+                # e.g. "runsc" (gVisor): a user-space kernel between the
+                # student's code and the host. Empty uses Docker's default.
+                runtime=settings.JUDGE_RUNTIME or None,
             )
             config = api.create_container_config(
                 image=self.image,
                 command=command,
-                user="1000:1000",
+                user=f"{SANDBOX_UID}:{SANDBOX_UID}",
                 working_dir="/work",
                 stdin_open=wants_stdin,
                 tty=False,
@@ -426,13 +469,23 @@ class JudgeExecutor:
                 },
             )
             raw = sock._sock if hasattr(sock, "_sock") else sock
+            # docker-py leaves its client timeout (60 s) on this socket. The
+            # loop below enforces the wall limit, and the stream ends when the
+            # container does, so a quiet program must not time the reader out.
+            if hasattr(raw, "settimeout"):
+                raw.settimeout(None)
             pump = _OutputPump(raw, settings.JUDGE_OUTPUT_MAX_BYTES)
             pump.start()
 
             start = time.monotonic()
             api.start(container_id)
             if wants_stdin:
-                self._feed_stdin(raw, stdin_data)
+                # On its own thread: sendall() blocks while the program is not
+                # reading, and the wall-limit loop must keep running meanwhile.
+                feeder = threading.Thread(
+                    target=self._feed_stdin, args=(raw, stdin_data), daemon=True
+                )
+                feeder.start()
 
             deadline = start + time_limit_s
             state: dict = {}
@@ -455,7 +508,13 @@ class JudgeExecutor:
                 time.sleep(0.05)
 
             wall_ms = int((time.monotonic() - start) * 1000)
-            pump.join(timeout=2)
+            # The container has exited, so the daemon is closing the stream;
+            # wait for the reader to drain it.
+            pump.join(timeout=PUMP_DRAIN_TIMEOUT_S)
+            if killed_for is None and (pump.is_alive() or not pump.completed):
+                # Grading cut-off output would turn a correct answer into
+                # WrongAnswer: retry instead.
+                raise SandboxError("Output stream did not finish")
             stdout, stderr = pump.text()
 
             if killed_for == "wall":
@@ -558,6 +617,8 @@ class _OutputPump(threading.Thread):
         self._bufs = {1: bytearray(), 2: bytearray()}
         self._total = 0
         self.overflowed = False
+        # True only once the stream ended normally (EOF), i.e. the output is whole.
+        self.completed = False
 
     def run(self) -> None:
         pending = bytearray()
@@ -565,6 +626,7 @@ class _OutputPump(threading.Thread):
             while True:
                 chunk = self._sock.recv(65536)
                 if not chunk:
+                    self.completed = True
                     break
                 pending += chunk
                 while len(pending) >= 8:

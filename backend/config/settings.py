@@ -92,6 +92,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
+    "axes",
     "accounts",
     "problems",
     "contests",
@@ -110,7 +111,25 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Last, per django-axes: turns a lockout into a 429 response.
+    "axes.middleware.AxesMiddleware",
 ]
+
+# django-axes locks a username+IP pair out after repeated failed Django admin
+# logins, which have no DRF throttle. The API login keeps its own throttles
+# (accounts/views_auth.py), so axes is limited to the admin site.
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
+AXES_FAILURE_LIMIT = env.int("AXES_FAILURE_LIMIT", default=5)
+AXES_COOLOFF_TIME = timedelta(minutes=env.int("AXES_COOLOFF_MINUTES", default=15))
+AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
+AXES_RESET_ON_SUCCESS = True
+AXES_ONLY_ADMIN_SITE = True
+AXES_HANDLER = "accounts.axes_handler.AdminOnlyAxesHandler"
+# Same client-IP rule as the DRF throttles (NUM_PROXIES).
+AXES_CLIENT_IP_CALLABLE = "accounts.client_ip.client_ip"
 
 ROOT_URLCONF = "config.urls"
 
@@ -197,9 +216,14 @@ REST_FRAMEWORK = {
         "runs": "20/min",
         # Per IP: generous, since a lab behind NAT can share one address.
         "login": env("LOGIN_IP_THROTTLE_RATE", default="30/min"),
-        # Per username: the real brute-force cap.
-        "login-user": env("LOGIN_USER_THROTTLE_RATE", default="5/min"),
-        "logout": "10/min",
+        # Failed logins per username from one IP: the brute-force cap.
+        "login-user-ip": env("LOGIN_USER_IP_THROTTLE_RATE", default="5/min"),
+        # Failed logins per username across all IPs: bounds distributed
+        # guessing, loose enough that one attacker cannot lock a victim out.
+        "login-user": env("LOGIN_USER_THROTTLE_RATE", default="20/min"),
+        # Per client IP: a whole lab behind NAT logs out at the bell, and a
+        # throttled logout leaves the refresh token un-revoked.
+        "logout": env("LOGOUT_THROTTLE_RATE", default="120/min"),
         "user-import": "6/min",
     },
 }
@@ -251,6 +275,9 @@ JUDGE_STDIN_MAX_BYTES = env("JUDGE_STDIN_MAX_BYTES")
 # Combined stdout+stderr cap per run; beyond it the container is killed.
 JUDGE_OUTPUT_MAX_BYTES = env("JUDGE_OUTPUT_MAX_BYTES")
 JUDGE_IMAGE = env("JUDGE_IMAGE")
+# Optional OCI runtime for sandboxes, e.g. "runsc" for gVisor (must be
+# installed on the Docker host). Empty uses Docker's default runtime.
+JUDGE_RUNTIME = env("JUDGE_RUNTIME", default="")
 JUDGE_CONCURRENCY = env("JUDGE_CONCURRENCY")
 # A submission Judging (claimed) or Pending (queued) for longer than this is
 # treated as lost (worker crash, Redis restart) and re-enqueued by the sweep.

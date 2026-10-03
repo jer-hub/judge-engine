@@ -505,6 +505,7 @@ export function ProblemsPanel() {
         }
         confirmLabel={confirm?.type === "publish" && confirm.next ? "Publish" : "Unpublish"}
         danger={confirm?.type === "publish" && !confirm.next}
+        busy={publishMutation.isPending}
         onCancel={() => setConfirm(null)}
         onConfirm={() => {
           if (confirm?.type !== "publish") return;
@@ -524,6 +525,7 @@ export function ProblemsPanel() {
             : ""
         }
         confirmLabel="Rejudge"
+        busy={rejudgeMutation.isPending}
         onCancel={() => setConfirm(null)}
         onConfirm={() => {
           if (confirm?.type !== "rejudge") return;
@@ -541,6 +543,7 @@ export function ProblemsPanel() {
         }
         confirmLabel="Delete"
         danger
+        busy={deleteMutation.isPending}
         onCancel={() => setConfirm(null)}
         onConfirm={() => {
           if (confirm?.type !== "delete") return;
