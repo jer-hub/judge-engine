@@ -42,10 +42,10 @@ def build_scoreboard(contest: Contest, viewer=None) -> dict[str, Any]:
     # they still see their own verdicts on the submissions page.
     payload = _compute_scoreboard(contest, reveal_frozen=is_admin)
     if not is_admin and contest.status == "upcoming":
-        # Don't reveal the problem set before the start.
+        # Before the start, reveal neither the problem set nor the roster
+        # (the contest detail hides participants from students too).
         payload["problems"] = []
-        for row in payload["standings"]:
-            row["problems"] = []
+        payload["standings"] = []
 
     if not is_admin:
         try:

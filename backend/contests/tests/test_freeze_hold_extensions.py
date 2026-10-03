@@ -133,6 +133,16 @@ class TimeExtensionTests(ContestTestBase):
         self.assertEqual(self._submit(self.alice).status_code, 201)
         self.assertEqual(self._submit(self.bob).status_code, 400)
 
+    def test_contest_list_status_follows_the_viewers_window(self):
+        def ids(user, status):
+            self._as(user)
+            return [c["id"] for c in self.client.get(f"/api/contests/?status={status}").data["results"]]
+
+        self.assertEqual(ids(self.alice, "active"), [self.contest.id])
+        self.assertEqual(ids(self.alice, "past"), [])
+        self.assertEqual(ids(self.bob, "active"), [])
+        self.assertEqual(ids(self.bob, "past"), [self.contest.id])
+
     def test_extended_student_keeps_problem_access(self):
         self.assertTrue(user_can_access_unpublished_problem(self.alice, self.problem))
         self.assertFalse(user_can_access_unpublished_problem(self.bob, self.problem))
