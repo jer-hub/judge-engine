@@ -23,6 +23,15 @@ class SeedArrayTechniquesTests(TestCase):
             self.assertIn(cases[0].input_data, problem.statement)
             self.assertIn(cases[0].expected_output, problem.statement)
 
+    def test_seed_demo_flag_adds_the_published_set(self):
+        call_command("seed_demo", force=True, stdout=StringIO())
+        self.assertFalse(Problem.objects.filter(tags__contains="array-techniques").exists())
+        out = StringIO()
+        call_command("seed_demo", force=True, array_techniques=True, stdout=out)
+        problems = Problem.objects.filter(tags__contains="array-techniques")
+        self.assertEqual(problems.filter(is_published=True).count(), 10)
+        self.assertIn("array-technique problems", out.getvalue())
+
     def test_balanced_pair_tests_have_at_most_one_answer(self):
         # The judge compares exact output, so "print any pair" must be unambiguous.
         spec = next(s for s in build_specs() if s.slug == "balanced-pair")

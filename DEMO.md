@@ -8,6 +8,12 @@ With Docker running:
 docker compose exec backend python manage.py seed_demo
 ```
 
+To also add the 10 Java array-technique practice problems (prefix sum, two pointers, sliding window, binary search, Kadane and more):
+
+```powershell
+docker compose exec backend python manage.py seed_demo --array-techniques
+```
+
 To wipe and recreate demo problems/contest:
 
 ```powershell

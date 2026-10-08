@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.conf import settings
+from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
@@ -139,6 +140,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Allow seeding when DEBUG is False.",
         )
+        parser.add_argument(
+            "--array-techniques",
+            action="store_true",
+            help="Also add the 10 Java array-technique practice problems (seed_array_techniques).",
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG and not options["force"]:
@@ -150,6 +156,9 @@ class Command(BaseCommand):
         students = self._ensure_students(reset_passwords=options["reset_passwords"])
         problems = self._ensure_problems(admin, reset=options["reset"])
         contest = self._ensure_contest(admin, problems, students, reset=options["reset"])
+        if options["array_techniques"]:
+            # Published, so students see them in the practice list right away.
+            call_command("seed_array_techniques", stdout=self.stdout)
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Demo ready"))
@@ -163,6 +172,8 @@ class Command(BaseCommand):
         self.stdout.write("")
         self.stdout.write(f"Contest: {contest.title} (id={contest.id}, status={contest.status})")
         self.stdout.write("Problems: " + ", ".join(p.slug for p in problems))
+        if options["array_techniques"]:
+            self.stdout.write("Practice: 10 array-technique problems (tag: array-techniques)")
         self.stdout.write("")
         self.stdout.write("Walkthrough:")
         self.stdout.write("  1. Log in as alice → Problems → A Plus B → submit sample Java")
