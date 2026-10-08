@@ -142,14 +142,15 @@ class UserImportApiTests(APITestCase):
             '"2026/10/08 9:01:12 AM GMT+8","juan@school.edu","2026-00101","Dela Cruz","Juan","BSIT-1A"\n'
             '"2026/10/08 9:03:40 AM GMT+8","maria@school.edu","2026-00102","Santos","Maria","BSIT-1A"\n'
         )
+        school_ids = ["2026-00101", "2026-00102"]  # also the usernames
         preview = self.client.post(self.url, {"csv_text": csv_text, "dry_run": True}, format="json")
         self.assertEqual(preview.data["created"], 2)
-        self.assertEqual(preview.data["needs_password"], ["2026-00101", "2026-00102"])
+        self.assertEqual(preview.data["needs_password"], school_ids)
         self.assertFalse(User.objects.filter(username="2026-00101").exists())
 
         resp = self._import(csv_text)
         self.assertEqual(resp.data["created"], 2)
-        self.assertEqual(resp.data["needs_password"], ["2026-00101", "2026-00102"])
+        self.assertEqual(resp.data["needs_password"], school_ids)
         juan = User.objects.get(username="2026-00101")
         self.assertEqual(
             (juan.first_name, juan.last_name, juan.email, juan.class_section, juan.role),
