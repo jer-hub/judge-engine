@@ -4,20 +4,57 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from dataclasses import dataclass
 
 MAX_ROWS = 500
 MAX_CSV_CHARS = 100_000
 
-REQUIRED_HEADERS = ("username", "password")
-OPTIONAL_HEADERS = (
+FIELDS = (
+    "username",
+    "password",
     "first_name",
     "last_name",
     "email",
     "school_id",
     "class_section",
 )
-ALLOWED_HEADERS = set(REQUIRED_HEADERS) | set(OPTIONAL_HEADERS)
+ALLOWED_HEADERS = set(FIELDS)
+
+# Other spellings of the fields, after _normalize_header(). A Google Forms
+# export names its columns after the questions ("First name", "Email
+# Address", "School ID"), so its CSV imports without renaming anything.
+# Columns that match nothing (e.g. "Timestamp") are ignored.
+HEADER_ALIASES = {
+    "user_name": "username",
+    "login": "username",
+    "first": "first_name",
+    "firstname": "first_name",
+    "given_name": "first_name",
+    "last": "last_name",
+    "lastname": "last_name",
+    "surname": "last_name",
+    "family_name": "last_name",
+    "email_address": "email",
+    "e_mail": "email",
+    "e_mail_address": "email",
+    "student_id": "school_id",
+    "student_number": "school_id",
+    "student_no": "school_id",
+    "id_number": "school_id",
+    "school_id_number": "school_id",
+    "section": "class_section",
+    "class": "class_section",
+    "course_and_section": "class_section",
+    "year_and_section": "class_section",
+    "course_year_and_section": "class_section",
+}
+
+
+def _normalize_header(name: str) -> str:
+    """'First name' -> 'first_name', 'E-mail Address' -> 'e_mail_address'."""
+    key = re.sub(r"[^a-z0-9]+", "_", (name or "").strip().lower()).strip("_")
+    return HEADER_ALIASES.get(key, key)
 
 
 @dataclass(frozen=True)
@@ -45,13 +82,13 @@ def parse_roster_csv(text: str) -> list[ParsedRow]:
     except StopIteration as exc:
         raise ValueError("CSV is empty.") from exc
 
-    headers = [h.strip().lower() for h in header_row]
+    headers = [_normalize_header(h) for h in header_row]
     if not any(headers):
         raise ValueError("CSV header row is missing.")
 
-    missing = [h for h in REQUIRED_HEADERS if h not in headers]
-    if missing:
-        raise ValueError(f"Missing required column(s): {', '.join(missing)}.")
+    # The school ID doubles as the username when there is no username column.
+    if "username" not in headers and "school_id" not in headers:
+        raise ValueError("Missing required column: username (or school_id).")
 
     # Map allowed header -> first column index
     col_index: dict[str, int] = {}
@@ -77,8 +114,12 @@ def parse_roster_csv(text: str) -> list[ParsedRow]:
             value = raw[idx].strip() if idx < len(raw) and raw[idx] is not None else ""
             data[key] = value
 
-        username = data.get("username", "")
+        if not data.get("username"):
+            data["username"] = data.get("school_id", "")
+        username = data["username"]
         error: str | None = None
+        if not username:
+            error = "Missing username (and no school ID to use instead)."
         if username:
             key = username.casefold()
             if key in seen_usernames:

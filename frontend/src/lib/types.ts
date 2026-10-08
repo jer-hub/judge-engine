@@ -167,6 +167,8 @@ export type UserImportResult = {
   failed: number;
   dry_run: boolean;
   created_usernames: string[];
+  /** Created without a password in the CSV; hand theirs out with Bulk password reset. */
+  needs_password?: string[];
   errors: UserImportError[];
 };
 

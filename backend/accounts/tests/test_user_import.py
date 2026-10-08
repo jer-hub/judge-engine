@@ -130,10 +130,38 @@ class UserImportApiTests(APITestCase):
         self._auth(self.admin)
         resp = self.client.post(
             self.url,
-            {"csv_text": "username\nalice\n"},
+            {"csv_text": "first_name\nAlice\n"},
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_google_forms_roster_creates_accounts_without_known_passwords(self):
+        self._auth(self.admin)
+        csv_text = (
+            '"Timestamp","Email Address","School ID","Last name","First name","Class section"\n'
+            '"2026/10/08 9:01:12 AM GMT+8","juan@school.edu","2026-00101","Dela Cruz","Juan","BSIT-1A"\n'
+            '"2026/10/08 9:03:40 AM GMT+8","maria@school.edu","2026-00102","Santos","Maria","BSIT-1A"\n'
+        )
+        preview = self.client.post(self.url, {"csv_text": csv_text, "dry_run": True}, format="json")
+        self.assertEqual(preview.data["created"], 2)
+        self.assertEqual(preview.data["needs_password"], ["2026-00101", "2026-00102"])
+        self.assertFalse(User.objects.filter(username="2026-00101").exists())
+
+        resp = self._import(csv_text)
+        self.assertEqual(resp.data["created"], 2)
+        self.assertEqual(resp.data["needs_password"], ["2026-00101", "2026-00102"])
+        juan = User.objects.get(username="2026-00101")
+        self.assertEqual(
+            (juan.first_name, juan.last_name, juan.email, juan.class_section, juan.role),
+            ("Juan", "Dela Cruz", "juan@school.edu", "BSIT-1A", User.Role.STUDENT),
+        )
+        # A random password was set (nobody knows it) and the account is usable
+        # once the teacher runs Bulk password reset for the section.
+        self.assertTrue(juan.has_usable_password())
+        reset = self.client.post(
+            "/api/users/bulk-reset-password/", {"section": "BSIT-1A"}, format="json"
+        )
+        self.assertEqual(reset.status_code, status.HTTP_200_OK, reset.data)
 
     def test_passwords_never_echoed(self):
         self._auth(self.admin)

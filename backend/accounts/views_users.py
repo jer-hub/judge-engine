@@ -329,6 +329,8 @@ def run_import(parsed, dry_run: bool) -> dict:
     failed = 0
     created_usernames: list[str] = []
     errors: list[dict] = []
+    # Created without a password from the CSV; they need Bulk password reset.
+    needs_password: list[str] = []
 
     for row in parsed:
         username = (row.data.get("username") or "").strip()
@@ -348,6 +350,12 @@ def run_import(parsed, dry_run: bool) -> dict:
             **row.data,
             "role": User.Role.STUDENT,
         }
+        # No password in the CSV (e.g. a Google Forms roster, which must
+        # never collect passwords): set a random one nobody knows. The
+        # teacher hands out real ones with Bulk password reset.
+        no_password = not payload.get("password")
+        if no_password:
+            payload["password"] = generate_password()
         write = AdminUserWriteSerializer(data=payload)
         if not write.is_valid():
             failed += 1
@@ -364,6 +372,8 @@ def run_import(parsed, dry_run: bool) -> dict:
         if dry_run:
             created += 1
             created_usernames.append(username)
+            if no_password:
+                needs_password.append(username)
             continue
 
         try:
@@ -390,6 +400,8 @@ def run_import(parsed, dry_run: bool) -> dict:
 
         created += 1
         created_usernames.append(user.username)
+        if no_password:
+            needs_password.append(user.username)
 
     return {
         "created": created,
@@ -397,5 +409,6 @@ def run_import(parsed, dry_run: bool) -> dict:
         "failed": failed,
         "dry_run": dry_run,
         "created_usernames": created_usernames,
+        "needs_password": needs_password,
         "errors": errors,
     }

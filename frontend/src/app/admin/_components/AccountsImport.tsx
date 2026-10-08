@@ -120,10 +120,15 @@ export function AccountsImport({ onImported }: Props) {
       <div>
         <h4 className="font-medium text-white">Import students from CSV</h4>
         <p className="mt-1 text-xs text-slate-400">
-          Required columns: <code className="text-slate-300">username</code>,{" "}
-          <code className="text-slate-300">password</code> (min 8 chars). Optional:{" "}
-          first_name, last_name, email, school_id, class_section. All imported accounts
-          are students. Existing usernames are skipped (passwords unchanged).
+          Required: <code className="text-slate-300">username</code>, or{" "}
+          <code className="text-slate-300">school_id</code> to use as the username. Optional:{" "}
+          password (min 8 chars), first_name, last_name, email, class_section. All imported
+          accounts are students. Existing usernames are skipped (passwords unchanged).
+        </p>
+        <p className="mt-1 text-xs text-slate-400">
+          A Google Forms export works as is: columns like &ldquo;First name&rdquo; or
+          &ldquo;Email Address&rdquo; are recognised and others (Timestamp) are ignored. Rows
+          without a password get a random one; give students theirs with Bulk password reset.
         </p>
         <p className="mt-2 break-all font-mono text-[11px] text-slate-500">{SAMPLE_HEADER}</p>
       </div>
@@ -197,6 +202,14 @@ export function AccountsImport({ onImported }: Props) {
             <span className="text-sky-300">{result.skipped} skipped</span>,{" "}
             <span className="text-amber-300">{result.failed} failed</span>
           </p>
+          {(result.needs_password?.length ?? 0) > 0 && (
+            <p className="mt-1 text-xs text-amber-200">
+              {result.needs_password!.length} account
+              {result.needs_password!.length === 1 ? "" : "s"}{" "}
+              {result.dry_run ? "would have" : "have"} no password from the CSV. Use{" "}
+              <strong>Bulk password reset</strong> for their section to print sign-in slips.
+            </p>
+          )}
           {result.created_usernames.length > 0 && (
             <p className="mt-1 text-xs text-slate-500">
               {result.dry_run ? "Would create" : "Created"}:{" "}

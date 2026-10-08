@@ -129,6 +129,7 @@ Backups run nightly into `./backups` (see [docs/BACKUPS.md](docs/BACKUPS.md)); c
 | Doc | Purpose |
 |-----|---------|
 | [DEMO.md](DEMO.md) | 10-minute classroom demo |
+| [docs/google-forms](docs/google-forms/README.md) | Student registration via Google Forms → CSV import |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design |
 | [docs/PUBLISH.md](docs/PUBLISH.md) | GitHub publish checklist |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Dev setup & PRs |
