@@ -19,10 +19,47 @@ class ParseRosterCsvTests(SimpleTestCase):
             },
         )
 
-    def test_missing_password_header_raises(self):
+    def test_missing_username_and_school_id_raises(self):
         with self.assertRaises(ValueError) as ctx:
-            parse_roster_csv("username\nalice\n")
-        self.assertIn("password", str(ctx.exception).lower())
+            parse_roster_csv("first_name,password\nAlice,pass12345\n")
+        self.assertIn("username", str(ctx.exception).lower())
+
+    def test_password_column_is_optional(self):
+        rows = parse_roster_csv("username\nalice\n")
+        self.assertEqual(rows[0].data, {"username": "alice"})
+        self.assertIsNone(rows[0].error)
+
+    def test_google_forms_export_maps_question_titles(self):
+        csv_text = (
+            '"Timestamp","Email Address","School ID","Last name","First name","Class section"\n'
+            '"2026/10/08 9:01:12 AM GMT+8","juan@school.edu","2026-00101","Dela Cruz","Juan","BSIT-1A"\n'
+        )
+        rows = parse_roster_csv(csv_text)
+        self.assertEqual(
+            rows[0].data,
+            {
+                "email": "juan@school.edu",
+                "school_id": "2026-00101",
+                "last_name": "Dela Cruz",
+                "first_name": "Juan",
+                "class_section": "BSIT-1A",
+                # No username column: the school ID is the username.
+                "username": "2026-00101",
+            },
+        )
+
+    def test_header_aliases(self):
+        rows = parse_roster_csv("Student No.,Surname,Given Name,Section,E-mail\nS1,Tan,Al,7A,a@x.edu\n")
+        self.assertEqual(
+            rows[0].data,
+            {"school_id": "S1", "last_name": "Tan", "first_name": "Al",
+             "class_section": "7A", "email": "a@x.edu", "username": "S1"},
+        )
+
+    def test_row_without_username_or_school_id_is_an_error(self):
+        rows = parse_roster_csv("username,school_id,first_name\n,,Alice\nbob,,Bob\n")
+        self.assertIn("Missing username", rows[0].error)
+        self.assertIsNone(rows[1].error)
 
     def test_skips_blank_lines_and_keeps_file_line_numbers(self):
         csv_text = (
