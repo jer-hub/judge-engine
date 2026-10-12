@@ -7,7 +7,8 @@ from submissions.models import Submission
 
 class RunPreviewSerializer(serializers.Serializer):
     problem = serializers.PrimaryKeyRelatedField(queryset=Problem.objects.all())
-    source_code = serializers.CharField()
+    # allow_blank: validate_source_code gives a clearer message for empty code.
+    source_code = serializers.CharField(allow_blank=True)
     language = serializers.ChoiceField(choices=Submission.Language.choices)
     stdin = serializers.CharField(required=False, allow_blank=True, default="")
 

@@ -11,6 +11,35 @@ export class ApiError extends Error {
   }
 }
 
+const FIELD_LABELS: Record<string, string> = {
+  source_code: "Code",
+  stdin: "Input",
+};
+
+function fieldLabel(field: string) {
+  const label = FIELD_LABELS[field] ?? field.replace(/_/g, " ");
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/**
+ * A readable message from a DRF error body. Validation errors arrive keyed by
+ * field ({"contest": ["Submissions are only allowed during the contest
+ * window."]}), not as {"detail": ...}; without this the user saw only the
+ * status text, "Bad Request".
+ */
+export function apiErrorMessage(data: unknown): string | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const parts: string[] = [];
+  for (const [field, value] of Object.entries(data as Record<string, unknown>)) {
+    const text = (Array.isArray(value) ? value : [value])
+      .map((v) => (typeof v === "string" ? v : JSON.stringify(v)))
+      .join(" ");
+    if (!text) continue;
+    parts.push(field === "detail" || field === "non_field_errors" ? text : `${fieldLabel(field)}: ${text}`);
+  }
+  return parts.length ? parts.join(" ") : null;
+}
+
 async function parseJson(res: Response) {
   const text = await res.text();
   if (!text) return null;
@@ -59,10 +88,8 @@ export async function apiFetch<T>(
   const data = await parseJson(res);
   if (res.status === 401) redirectToLogin();
   if (!res.ok) {
-    let detail: string | null = null;
-    if (data && typeof data === "object" && data !== null && "detail" in data) {
-      detail = String((data as { detail: unknown }).detail);
-    } else if (typeof data === "string" && data.includes("APPEND_SLASH")) {
+    let detail = apiErrorMessage(data);
+    if (!detail && typeof data === "string" && data.includes("APPEND_SLASH")) {
       detail = "API URL missing trailing slash (fixed — please retry).";
     }
     throw new ApiError(detail || res.statusText || `HTTP ${res.status}`, res.status, data);

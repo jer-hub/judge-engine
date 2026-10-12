@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, apiFetch } from "@/lib/api";
+import { ApiError, apiErrorMessage, apiFetch } from "@/lib/api";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -41,6 +41,18 @@ describe("apiFetch", () => {
     expect(assign).not.toHaveBeenCalled();
   });
 
+  it("shows field validation errors instead of 'Bad Request'", async () => {
+    // What the API really returned for a submission after the contest ended.
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({ contest: ["Submissions are only allowed during the contest window."] }),
+        { status: 400, statusText: "Bad Request", headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const err = await apiFetch<never>("/submissions/").catch((e: ApiError) => e);
+    expect(err.message).toBe("Contest: Submissions are only allowed during the contest window.");
+  });
+
   it("sends an expired session to login and back, query included", async () => {
     fetchMock.mockResolvedValue(jsonResponse(401, { detail: "expired" }));
     await expect(apiFetch("/submissions/")).rejects.toBeInstanceOf(ApiError);
@@ -52,5 +64,27 @@ describe("apiFetch", () => {
     fetchMock.mockResolvedValue(jsonResponse(401, {}));
     await expect(apiFetch("/auth/me/")).rejects.toBeInstanceOf(ApiError);
     expect(assign).not.toHaveBeenCalled();
+  });
+});
+
+describe("apiErrorMessage", () => {
+  it("labels fields and joins their messages", () => {
+    expect(apiErrorMessage({ source_code: ["Source code cannot be empty."] })).toBe(
+      "Code: Source code cannot be empty.",
+    );
+    expect(apiErrorMessage({ class_section: ["Too long.", "Bad chars."] })).toBe(
+      "Class section: Too long. Bad chars.",
+    );
+  });
+
+  it("shows detail and non-field errors without a label", () => {
+    expect(apiErrorMessage({ detail: "Not found." })).toBe("Not found.");
+    expect(apiErrorMessage({ non_field_errors: ["Pick one."] })).toBe("Pick one.");
+  });
+
+  it("returns null when there is nothing to show", () => {
+    expect(apiErrorMessage(null)).toBeNull();
+    expect(apiErrorMessage("<html>502</html>")).toBeNull();
+    expect(apiErrorMessage({})).toBeNull();
   });
 });

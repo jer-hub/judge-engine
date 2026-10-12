@@ -81,6 +81,9 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Submission
         fields = ("problem", "contest", "source_code", "language")
+        # Let validate_source_code give its own message for empty code instead
+        # of DRF's generic "This field may not be blank."
+        extra_kwargs = {"source_code": {"allow_blank": True}}
 
     def validate_source_code(self, value: str) -> str:
         max_bytes = settings.JUDGE_SOURCE_MAX_BYTES
