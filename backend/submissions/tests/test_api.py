@@ -94,6 +94,17 @@ public class Solution {
             self.assertEqual(resp.data["status"], Submission.Status.PENDING)
             mocked.assert_called_once()
 
+    def test_empty_submission_says_why(self):
+        self._auth(self.student)
+        for blank in ("", "   \n"):
+            resp = self.client.post(
+                reverse("submission-list"),
+                {"problem": self.problem.id, "source_code": blank, "language": "java"},
+                format="json",
+            )
+            self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertEqual(resp.data["source_code"], ["Source code cannot be empty."])
+
     def test_submission_saved_when_broker_is_down(self):
         from unittest.mock import patch
 

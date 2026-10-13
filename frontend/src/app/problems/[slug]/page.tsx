@@ -52,6 +52,9 @@ function ProblemDetailInner() {
   });
   const contest = contestQuery.data;
   const contestOver = !!contestId && contest?.my_status !== "active";
+  // The contest is running but this user never registered: the API would
+  // refuse the submission, so say so up front.
+  const mustRegister = !!contest && contest.my_status === "active" && !contest.is_registered;
 
   const { data: me } = useQuery({
     queryKey: ["me"],
@@ -96,6 +99,11 @@ function ProblemDetailInner() {
       void queryClient.invalidateQueries({ queryKey: mySubmissionsKey(data.problem) });
       // The problem list's solved/attempted markers.
       void queryClient.invalidateQueries({ queryKey: ["problems"] });
+    },
+    // A refusal often means the contest window or registration changed since
+    // the page loaded; refresh it so the button reflects that.
+    onError: () => {
+      if (contestId) void contestQuery.refetch();
     },
   });
 
@@ -158,7 +166,7 @@ function ProblemDetailInner() {
 
   const busy = submit.isPending || run.isPending;
   // Practice "Run" stays available after the contest; graded Submit doesn't.
-  const submitBlocked = busy || contestOver;
+  const submitBlocked = busy || contestOver || mustRegister;
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -272,11 +280,26 @@ function ProblemDetailInner() {
               submit.mutate();
             }}
             disabled={submitBlocked}
-            title={contestOver ? "This contest is over for you" : undefined}
+            title={
+              contestOver
+                ? "This contest is over for you"
+                : mustRegister
+                  ? "Register for the contest to submit"
+                  : undefined
+            }
             className="rounded-sm bg-emerald-600 px-4 py-2 font-medium hover:bg-emerald-500 disabled:opacity-60"
           >
             {submit.isPending ? "Submitting…" : "Submit Java"}
           </button>
+          {mustRegister && (
+            <span className="text-sm text-amber-300">
+              You&apos;re not registered for this contest.{" "}
+              <a href={`/contests/${contestId}`} className="underline hover:text-amber-200">
+                Register on the contest page
+              </a>{" "}
+              to submit.
+            </span>
+          )}
           {(run.isError || submit.isError) && (
             <span className="text-sm text-red-300">
               {((run.error || submit.error) as Error).message}

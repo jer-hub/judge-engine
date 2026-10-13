@@ -46,3 +46,6 @@ judge_data/
 
 # Database dumps (docker-compose.prod.yml db-backup) — contain user data
 backups/
+
+# Generated handouts (the array-techniques PDF includes the answer key).
+handouts/

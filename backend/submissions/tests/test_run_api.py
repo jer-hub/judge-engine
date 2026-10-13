@@ -127,3 +127,4 @@ class RunPreviewApiTests(APITestCase):
             format="json",
         )
         self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resp.data["source_code"], ["Source code cannot be empty."])
