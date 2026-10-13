@@ -145,6 +145,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Also add the 10 Java array-technique practice problems (seed_array_techniques).",
         )
+        parser.add_argument(
+            "--number-theory",
+            action="store_true",
+            help="Also add the 8 Java number theory practice problems (seed_number_theory).",
+        )
 
     def handle(self, *args, **options):
         if not settings.DEBUG and not options["force"]:
@@ -159,6 +164,8 @@ class Command(BaseCommand):
         if options["array_techniques"]:
             # Published, so students see them in the practice list right away.
             call_command("seed_array_techniques", stdout=self.stdout)
+        if options["number_theory"]:
+            call_command("seed_number_theory", stdout=self.stdout)
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS("Demo ready"))
@@ -174,6 +181,8 @@ class Command(BaseCommand):
         self.stdout.write("Problems: " + ", ".join(p.slug for p in problems))
         if options["array_techniques"]:
             self.stdout.write("Practice: 10 array-technique problems (tag: array-techniques)")
+        if options["number_theory"]:
+            self.stdout.write("Practice: 8 number theory problems (tag: number-theory)")
         self.stdout.write("")
         self.stdout.write("Walkthrough:")
         self.stdout.write("  1. Log in as alice → Problems → A Plus B → submit sample Java")

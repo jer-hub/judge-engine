@@ -48,6 +48,14 @@ class SeedNumberTheoryTests(TestCase):
         self.assertEqual(problems.count(), 8)
         self.assertFalse(problems.filter(is_published=True).exists())
 
+    def test_seed_demo_flag_adds_the_published_set(self):
+        Problem.objects.filter(tags__contains="number-theory").delete()
+        out = StringIO()
+        call_command("seed_demo", force=True, number_theory=True, stdout=out)
+        problems = Problem.objects.filter(tags__contains="number-theory")
+        self.assertEqual(problems.filter(is_published=True).count(), 8)
+        self.assertIn("8 number theory problems", out.getvalue())
+
     def test_secret_number_inputs_respect_the_constraints(self):
         import math
 
