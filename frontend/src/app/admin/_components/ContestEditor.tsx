@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import {
   bulkRejudge,
   describeRejudge,
+  downloadSolutionsZip,
   downloadStandingsCsv,
   formatApiErrorPayload,
 } from "@/lib/admin";
@@ -109,6 +110,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [exportSection, setExportSection] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [exportingSolutions, setExportingSolutions] = useState(false);
   const [confirmRejudge, setConfirmRejudge] = useState(false);
 
   const detail = useQuery({
@@ -197,6 +199,18 @@ export function ContestEditor({ contestId, onClose }: Props) {
       setError((err as Error).message);
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function exportSolutions() {
+    setExportingSolutions(true);
+    setError(null);
+    try {
+      await downloadSolutionsZip({ contest: contestId, section: exportSection || undefined });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setExportingSolutions(false);
     }
   }
 
@@ -430,6 +444,15 @@ export function ContestEditor({ contestId, onClose }: Props) {
           className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
         >
           {exporting ? "Exporting…" : "Export standings (CSV)"}
+        </button>
+        <button
+          type="button"
+          onClick={() => void exportSolutions()}
+          disabled={exportingSolutions}
+          title="Every submitted solution as .java files per student and problem, plus index.csv"
+          className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
+        >
+          {exportingSolutions ? "Preparing…" : "Download solutions (ZIP)"}
         </button>
         <button
           type="button"
