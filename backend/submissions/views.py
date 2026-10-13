@@ -1,3 +1,6 @@
+from django.http import HttpResponse
+from django.utils import timezone
+from django.utils.text import slugify
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -8,6 +11,7 @@ from rest_framework.throttling import UserRateThrottle
 from accounts.permissions import IsAdmin
 from audit.mixins import AuditedViewSetMixin
 
+from .export import MAX_EXPORT_SUBMISSIONS, solutions_zip
 from .models import Submission
 from .rejudge import queue_rejudge
 from .serializers import SubmissionCreateSerializer, SubmissionSerializer
@@ -71,7 +75,7 @@ class SubmissionViewSet(
         return SubmissionSerializer
 
     def get_permissions(self):
-        if self.action in ("rejudge", "bulk_rejudge"):
+        if self.action in ("rejudge", "bulk_rejudge", "export"):
             return [IsAuthenticated(), IsAdmin()]
         return [IsAuthenticated()]
 
@@ -125,3 +129,51 @@ class SubmissionViewSet(
         return Response(
             {"queued": len(queued), "skipped_in_flight": scope.count() - len(queued)}
         )
+
+    @action(detail=False, methods=["get"], url_path="export")
+    def export(self, request):
+        """Every submitted solution for a contest and/or problem as a ZIP:
+        .java files per student and problem plus index.csv. Optional
+        ?section= limits it to one class section."""
+        from contests.models import Contest, ContestProblem
+        from problems.models import Problem
+
+        problem_id = _int_param(request.query_params, "problem")
+        contest_id = _int_param(request.query_params, "contest")
+        if problem_id is None and contest_id is None:
+            raise ValidationError({"detail": "Give a problem, a contest, or both."})
+        scope = Submission.objects.all()
+        names, letters = [], {}
+        if contest_id is not None:
+            contest = Contest.objects.filter(pk=contest_id).first()
+            if contest is None:
+                raise ValidationError({"contest": "No such contest."})
+            scope = scope.filter(contest_id=contest_id)
+            names.append(slugify(contest.title) or f"contest-{contest_id}")
+            letters = dict(
+                ContestProblem.objects.filter(contest_id=contest_id).values_list("problem_id", "letter")
+            )
+        if problem_id is not None:
+            problem = Problem.objects.filter(pk=problem_id).first()
+            if problem is None:
+                raise ValidationError({"problem": "No such problem."})
+            scope = scope.filter(problem_id=problem_id)
+            names.append(problem.slug)
+        section = (request.query_params.get("section") or "").strip()
+        if section:
+            scope = scope.filter(user__class_section__iexact=section)
+            names.append(slugify(section))
+        count = scope.count()
+        if count == 0:
+            raise ValidationError({"detail": "No submissions to export."})
+        if count > MAX_EXPORT_SUBMISSIONS:
+            raise ValidationError(
+                {"detail": f"{count} submissions; export at most {MAX_EXPORT_SUBMISSIONS} at a time "
+                           "(pick a problem or a section)."}
+            )
+        stamp = timezone.localtime().strftime("%Y%m%d-%H%M")
+        response = HttpResponse(solutions_zip(scope, letters), content_type="application/zip")
+        response["Content-Disposition"] = (
+            f'attachment; filename="{"-".join(names)}-solutions-{stamp}.zip"'
+        )
+        return response

@@ -18,16 +18,37 @@ export function describeRejudge(result: BulkRejudgeResult): string {
 }
 
 /** Download a contest's final standings as CSV (optionally one section). */
-export async function downloadStandingsCsv(contestId: number, section?: string) {
+export function downloadStandingsCsv(contestId: number, section?: string) {
   const query = section ? `?section=${encodeURIComponent(section)}` : "";
-  const res = await fetch(`/api/proxy/contests/${contestId}/standings-export${query}`, {
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error(`Export failed (HTTP ${res.status}).`);
+  return downloadFile(
+    `/contests/${contestId}/standings-export${query}`,
+    `contest-${contestId}-standings.csv`,
+  );
+}
+
+/**
+ * Every submitted solution for a contest and/or problem as a ZIP: .java files
+ * per student and problem, plus index.csv (optionally one class section).
+ */
+export function downloadSolutionsZip(scope: { contest?: number; problem?: number; section?: string }) {
+  const params = new URLSearchParams();
+  if (scope.contest != null) params.set("contest", String(scope.contest));
+  if (scope.problem != null) params.set("problem", String(scope.problem));
+  if (scope.section) params.set("section", scope.section);
+  return downloadFile(`/submissions/export?${params}`, "solutions.zip");
+}
+
+/** GET a file through the API proxy and save it with the server's filename. */
+async function downloadFile(path: string, fallbackName: string) {
+  const res = await fetch(`/api/proxy${path}`, { credentials: "include" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const detail = body && typeof body === "object" && "detail" in body ? String(body.detail) : "";
+    throw new Error(detail || `Download failed (HTTP ${res.status}).`);
+  }
   const blob = await res.blob();
   const name =
-    /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ??
-    `contest-${contestId}-standings.csv`;
+    /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? fallbackName;
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;

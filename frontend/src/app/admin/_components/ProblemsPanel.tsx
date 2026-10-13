@@ -13,6 +13,7 @@ import {
   bulkRejudge,
   describeRejudge,
   djangoAdminUrl,
+  downloadSolutionsZip,
   formatApiErrorPayload,
 } from "@/lib/admin";
 import { ApiError, apiFetch } from "@/lib/api";
@@ -117,6 +118,15 @@ export function ProblemsPanel() {
           : err.message,
       );
       setConfirm(null);
+    },
+  });
+
+  const solutionsMutation = useMutation({
+    mutationFn: (problemId: number) => downloadSolutionsZip({ problem: problemId }),
+    onSuccess: () => setFormError(null),
+    onError: (err: Error) => {
+      setNotice(null);
+      setFormError(err.message);
     },
   });
 
@@ -459,6 +469,15 @@ export function ProblemsPanel() {
                         className="cursor-pointer text-amber-300 transition hover:text-amber-200 disabled:opacity-50"
                       >
                         Rejudge
+                      </button>
+                      <button
+                        type="button"
+                        disabled={solutionsMutation.isPending}
+                        onClick={() => solutionsMutation.mutate(p.id)}
+                        title="Download every submitted solution as a ZIP"
+                        className="cursor-pointer text-sky-300 transition hover:text-sky-200 disabled:opacity-50"
+                      >
+                        Solutions
                       </button>
                       <button
                         type="button"
