@@ -5,7 +5,7 @@ from rest_framework.response import Response
 
 from accounts.permissions import IsAdmin
 from audit.mixins import AuditedViewSetMixin
-from contests.access import unpublished_contest_problem_q
+from contests.access import public_problem_q, unpublished_contest_problem_q
 from submissions.models import Submission
 
 from .models import Problem
@@ -36,10 +36,12 @@ class ProblemViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
             qs = Problem.objects.all().order_by("title")
 
         if not is_admin:
+            # A problem in a contest that isn't over is reached only through
+            # that contest, not the public set (contests/access.py).
             if self.action == "retrieve":
-                qs = qs.filter(Q(is_published=True) | unpublished_contest_problem_q(user))
+                qs = qs.filter(public_problem_q() | unpublished_contest_problem_q(user))
             else:
-                qs = qs.filter(is_published=True)
+                qs = qs.filter(public_problem_q())
 
         if self.action == "list":
             # The viewer's own progress, for solved/attempted markers.
