@@ -37,10 +37,12 @@ class RunPreviewSerializer(serializers.Serializer):
 
     def validate_problem(self, problem: Problem) -> Problem:
         user = self.context["request"].user
-        if problem.is_published or getattr(user, "is_platform_admin", False):
+        if getattr(user, "is_platform_admin", False):
             return problem
-        from contests.access import user_can_access_unpublished_problem
+        from contests.access import user_can_view_problem
 
-        if user_can_access_unpublished_problem(user, problem):
+        # Same rule as the statement: the public set, a contest running for
+        # this student, or a finished contest open for practice.
+        if user_can_view_problem(user, problem):
             return problem
-        raise serializers.ValidationError("Problem is not published.")
+        raise serializers.ValidationError("Problem is not available.")

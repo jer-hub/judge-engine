@@ -94,8 +94,9 @@ class PublishedProblemInRunningContestTests(APITestCase):
     def test_participant_cannot_submit_outside_the_contest(self):
         self.assertEqual(self._practice(self.alice), (200, 400))
 
-    def test_non_participant_can_still_practice(self):
-        self.assertEqual(self._practice(self.bob), (200, 201))
+    def test_non_participant_cannot_see_or_practise_it_during_the_contest(self):
+        # Hidden from the public set until the contest is over for everyone.
+        self.assertEqual(self._practice(self.bob), (404, 400))
 
     def test_open_again_after_the_participants_window(self):
         now = timezone.now()
