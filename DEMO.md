@@ -14,6 +14,12 @@ To also add the 10 Java array-technique practice problems (prefix sum, two point
 docker compose exec backend python manage.py seed_demo --array-techniques
 ```
 
+To add the 8 Java number theory problems (fast exponentiation, modular inverse, sieve, divisor functions, extended Euclid, CRT, nCr mod p, Möbius), add `--number-theory`. The two options can be combined:
+
+```powershell
+docker compose exec backend python manage.py seed_demo --array-techniques --number-theory
+```
+
 To wipe and recreate demo problems/contest:
 
 ```powershell

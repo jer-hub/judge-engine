@@ -67,7 +67,7 @@ docker compose exec backend python manage.py seed_demo
 
 Change the admin password after first login. Full classroom walkthrough: [DEMO.md](DEMO.md).
 
-To add 10 Java array-technique practice problems (prefix sum, two pointers, sliding window, binary search, Kadane and more) to the demo, run `seed_demo --array-techniques` instead. On a production server, load the same set with `python manage.py seed_array_techniques --draft`, which leaves the problems unpublished until you publish them.
+To add practice problem sets to the demo, run `seed_demo` with `--array-techniques` (10 Java array-technique problems) and/or `--number-theory` (8 Java number theory problems). On a production server, load the same sets with `python manage.py seed_array_techniques --draft` and `python manage.py seed_number_theory --draft`, which leave the problems unpublished until you publish them.
 
 ### Smoke test
 
