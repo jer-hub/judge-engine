@@ -64,6 +64,9 @@ class Submission(models.Model):
     # Automatic re-judges after SystemError; capped so a broken problem cannot
     # loop forever. Reset by a manual rejudge.
     auto_rejudges = models.PositiveSmallIntegerField(default=0, editable=False)
+    # Integrity metadata (warn-only leads for teachers). Never exposed to students.
+    client_ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=512, blank=True, default="")
 
     class Meta:
         ordering = ["-submitted_at"]

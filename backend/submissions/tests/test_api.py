@@ -94,6 +94,40 @@ public class Solution {
             self.assertEqual(resp.data["status"], Submission.Status.PENDING)
             mocked.assert_called_once()
 
+    def test_create_submission_stores_client_ip_and_user_agent(self):
+        from unittest.mock import patch
+
+        self._auth(self.student)
+        ua = "Mozilla/5.0 (TestIntegrity/1.0)"
+        # Patch contest access annotations (Postgres duration math) so this
+        # assertion runs under SQLite too; production uses PostgreSQL.
+        with (
+            patch("judge.tasks.judge_submission.delay"),
+            patch(
+                "submissions.serializers.running_contest_with_problem",
+                return_value=None,
+            ),
+            patch("submissions.serializers.in_public_set", return_value=True),
+        ):
+            resp = self.client.post(
+                reverse("submission-list"),
+                {
+                    "problem": self.problem.id,
+                    "source_code": "class Solution {}",
+                    "language": "java",
+                },
+                format="json",
+                HTTP_USER_AGENT=ua,
+                REMOTE_ADDR="203.0.113.50",
+            )
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        sub = Submission.objects.get(pk=resp.data["id"])
+        self.assertEqual(str(sub.client_ip), "203.0.113.50")
+        self.assertEqual(sub.user_agent, ua)
+        # Students must not receive integrity metadata in the API payload.
+        self.assertNotIn("client_ip", resp.data)
+        self.assertNotIn("user_agent", resp.data)
+
     def test_empty_submission_says_why(self):
         self._auth(self.student)
         for blank in ("", "   \n"):

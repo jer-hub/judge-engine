@@ -93,8 +93,15 @@ public class Solution {
 
 Expect **WrongAnswer**, then fix with the loop/`n*(n+1)/2` formula and get **Accepted**.
 
+### E. Integrity panel (optional, 1–2 min)
+1. As `admin`, open the frontend admin contest editor for **Demo Cup**
+2. Show **Integrity signals** — focus/paste counts and submit IPs (leads, not proof)
+3. Optional strict demo: enable **Strict: fullscreen…**, save, then as `alice` open a contest problem — enter fullscreen, Alt-Tab away (Submit locks). As `admin`, Integrity panel → **Unlock** on alice
+4. Optionally open **Similar code** on the same contest
+
 ## 4. Talking points
 - Hidden tests never leave the API (only samples shown)
 - Untrusted Java runs in a Docker sandbox (no network, memory/CPU caps)
 - Contests use ICPC-style scoring (solves, then penalty time)
 - Teachers manage roster/problems in Django Admin — no public signup
+- Integrity monitoring logs focus/paste/IP for teacher review only (never auto-DQ)

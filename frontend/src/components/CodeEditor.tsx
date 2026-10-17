@@ -19,9 +19,11 @@ public class Solution {
 type Props = {
   value: string;
   onChange: (value: string) => void;
+  /** Optional contest integrity: paste length only (never clipboard text). Used in warn-only and strict soft-block modes. */
+  onPasteChars?: (chars: number) => void;
 };
 
-export function CodeEditor({ value, onChange }: Props) {
+export function CodeEditor({ value, onChange, onPasteChars }: Props) {
   return (
     <div className="overflow-hidden rounded-lg border border-slate-800">
       <Editor
@@ -30,6 +32,14 @@ export function CodeEditor({ value, onChange }: Props) {
         theme="vs-dark"
         value={value}
         onChange={(v) => onChange(v ?? "")}
+        onMount={(editor) => {
+          if (!onPasteChars) return;
+          editor.onDidPaste((e) => {
+            const range = e.range;
+            const text = editor.getModel()?.getValueInRange(range) ?? "";
+            onPasteChars(text.length);
+          });
+        }}
         options={{
           minimap: { enabled: false },
           fontSize: 14,

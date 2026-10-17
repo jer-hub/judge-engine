@@ -1,6 +1,16 @@
 from datetime import timedelta
 
-from django.db.models import DateTimeField, ExpressionWrapper, F, OuterRef, Q, Subquery, Value
+from django.db import transaction
+from django.db.models import (
+    Count,
+    DateTimeField,
+    ExpressionWrapper,
+    F,
+    OuterRef,
+    Q,
+    Subquery,
+    Value,
+)
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
@@ -11,12 +21,15 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
 
 from accounts.permissions import IsAdmin
 from audit.mixins import AuditedViewSetMixin
+from submissions.models import Submission
 
 from .export import standings_csv
 from . import clarifications as clar
+from . import integrity as integ
 from .models import Clarification, Contest, ContestParticipant
 from .scoreboard import build_scoreboard, invalidate_scoreboard_cache
 from .similarity import contest_similarity
@@ -25,6 +38,17 @@ from .serializers import (
     ContestListSerializer,
     ContestWriteSerializer,
 )
+
+BULK_MAX_IDS = 50
+BULK_ACTIONS = frozenset({"archive", "set_public", "set_invite_only"})
+
+
+class IntegrityEventThrottle(UserRateThrottle):
+    scope = "integrity-events"
+
+
+class IntegrityUnlockThrottle(UserRateThrottle):
+    scope = "integrity-unlock"
 
 
 class ContestViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
@@ -36,31 +60,67 @@ class ContestViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
             "participants__user",
         )
         user = self.request.user
-        if not getattr(user, "is_platform_admin", False):
-            qs = qs.filter(Q(is_public=True) | Q(participants__user=user)).distinct()
+        is_admin = getattr(user, "is_platform_admin", False)
+        if not is_admin:
+            qs = qs.filter(is_archived=False).filter(
+                Q(is_public=True) | Q(participants__user=user)
+            ).distinct()
+
+        if self.action == "list":
+            qs = qs.annotate(
+                problem_count=Count("contest_problems", distinct=True),
+                blocked_count=Count(
+                    "participants",
+                    filter=Q(participants__integrity_blocked=True),
+                    distinct=True,
+                ),
+                clarifications_waiting=Count(
+                    "clarifications",
+                    filter=Q(
+                        clarifications__answered_at__isnull=True,
+                        clarifications__question__gt="",
+                    ),
+                    distinct=True,
+                ),
+            )
 
         status_filter = self.request.query_params.get("status")
         now = timezone.now()
-        if status_filter in ("active", "past"):
-            # The viewer's own end: a student with a time extension is still
-            # in an "active" contest after the official end.
-            extra = ContestParticipant.objects.filter(
-                contest=OuterRef("pk"), user_id=user.pk
-            ).values("extra_minutes")[:1]
-            qs = qs.annotate(
-                my_end=ExpressionWrapper(
-                    F("end_time")
-                    + Coalesce(Subquery(extra), 0) * Value(timedelta(minutes=1)),
-                    output_field=DateTimeField(),
+        if status_filter == "archived":
+            if is_admin:
+                qs = qs.filter(is_archived=True)
+            else:
+                qs = qs.none()
+        else:
+            # Non-archived lifecycle filters (admins browsing Active etc.).
+            if is_admin and status_filter in ("upcoming", "active", "past", None, ""):
+                if status_filter:
+                    qs = qs.filter(is_archived=False)
+            if status_filter in ("active", "past"):
+                # The viewer's own end: a student with a time extension is still
+                # in an "active" contest after the official end.
+                extra = ContestParticipant.objects.filter(
+                    contest=OuterRef("pk"), user_id=user.pk
+                ).values("extra_minutes")[:1]
+                qs = qs.annotate(
+                    my_end=ExpressionWrapper(
+                        F("end_time")
+                        + Coalesce(Subquery(extra), 0) * Value(timedelta(minutes=1)),
+                        output_field=DateTimeField(),
+                    )
                 )
-            )
-        if status_filter == "upcoming":
-            qs = qs.filter(start_time__gt=now)
-        elif status_filter == "active":
-            qs = qs.filter(start_time__lte=now, my_end__gte=now)
-        elif status_filter == "past":
-            qs = qs.filter(my_end__lt=now)
-        return qs
+            if status_filter == "upcoming":
+                qs = qs.filter(start_time__gt=now, is_archived=False)
+            elif status_filter == "active":
+                qs = qs.filter(start_time__lte=now, my_end__gte=now, is_archived=False)
+            elif status_filter == "past":
+                qs = qs.filter(my_end__lt=now, is_archived=False)
+
+        search = (self.request.query_params.get("search") or "").strip()
+        if search:
+            qs = qs.filter(title__icontains=search)
+        # Re-assert Meta ordering after annotate/filter (pagination warning).
+        return qs.order_by("-start_time")
 
     def get_serializer_class(self):
         if self.action in ("create", "update", "partial_update"):
@@ -73,10 +133,76 @@ class ContestViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
         if self.action in (
             "create", "update", "partial_update", "destroy",
             "reveal", "extensions", "standings_export", "answer_clarification",
-            "similarity",
+            "similarity", "integrity", "integrity_unlock",
+            "archive", "bulk",
         ):
             return [IsAuthenticated(), IsAdmin()]
         return [IsAuthenticated()]
+
+    def destroy(self, request, *args, **kwargs):
+        contest = self.get_object()
+        now = timezone.now()
+        has_subs = Submission.objects.filter(contest=contest).exists()
+        upcoming_empty = now < contest.start_time and not has_subs
+        if not contest.is_archived and not upcoming_empty:
+            raise ValidationError(
+                {
+                    "detail": (
+                        "Archive the contest first, or delete only an upcoming "
+                        "contest with no submissions."
+                    )
+                }
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    def get_throttles(self):
+        if self.action == "integrity_events":
+            return [IntegrityEventThrottle()]
+        if self.action == "integrity_unlock":
+            return [IntegrityUnlockThrottle()]
+        return super().get_throttles()
+
+    @action(detail=False, methods=["post"], url_path="bulk")
+    def bulk(self, request):
+        """Admin: archive or visibility for many contests.
+        Body: {"ids": [1,2], "action": "archive"|"set_public"|"set_invite_only"}."""
+        ids = request.data.get("ids")
+        action_name = request.data.get("action")
+        if not isinstance(ids, list) or not ids:
+            raise ValidationError({"ids": "Provide a non-empty list of contest ids."})
+        if len(ids) > BULK_MAX_IDS:
+            raise ValidationError({"ids": f"At most {BULK_MAX_IDS} contests."})
+        if action_name not in BULK_ACTIONS:
+            raise ValidationError(
+                {"action": f"Must be one of: {', '.join(sorted(BULK_ACTIONS))}."}
+            )
+        clean_ids: list[int] = []
+        for raw in ids:
+            if isinstance(raw, bool) or not isinstance(raw, int):
+                raise ValidationError({"ids": "Each id must be an integer."})
+            clean_ids.append(raw)
+        with transaction.atomic():
+            qs = Contest.objects.filter(pk__in=clean_ids)
+            if action_name == "archive":
+                updated = qs.update(is_archived=True)
+            elif action_name == "set_public":
+                updated = qs.update(is_public=True)
+            else:
+                updated = qs.update(is_public=False)
+        return Response({"updated": updated, "action": action_name})
+
+    @action(detail=True, methods=["post"], url_path="archive")
+    def archive(self, request, pk=None):
+        """Admin: soft-archive or restore ({"archived": true|false})."""
+        contest = self.get_object()
+        archived = request.data.get("archived", True)
+        if not isinstance(archived, bool):
+            raise ValidationError({"archived": "Must be true or false."})
+        contest.is_archived = archived
+        contest.save(update_fields=["is_archived"])
+        return Response(
+            ContestListSerializer(contest, context={"request": request}).data
+        )
 
     @action(detail=True, methods=["post"], url_path="register")
     def register(self, request, pk=None):
@@ -141,6 +267,32 @@ class ContestViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
         if not 0.3 <= threshold <= 1:
             raise ValidationError({"threshold": "Must be between 0.3 and 1."})
         return Response({"threshold": threshold, "pairs": contest_similarity(contest, threshold)})
+
+    @action(detail=True, methods=["post"], url_path="integrity-events")
+    def integrity_events(self, request, pk=None):
+        """Student: batch of warn-only proctoring signals during an active contest.
+        Body: {"events": [{"type": "window_blur", "count": 1, "meta": {...}}]}."""
+        contest = self.get_object()
+        result = integ.record_events(
+            contest, request.user, request.data.get("events", [])
+        )
+        return Response(result, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="integrity-unlock")
+    def integrity_unlock(self, request, pk=None):
+        """Admin: clear a student's soft-block ({"username"})."""
+        contest = self.get_object()
+        return Response(
+            integ.unlock_soft_block(
+                contest, request.user, request.data.get("username", "")
+            )
+        )
+
+    @action(detail=True, methods=["get"], url_path="integrity")
+    def integrity(self, request, pk=None):
+        """Admin: per-participant focus/paste totals, submit IPs, shared-IP leads."""
+        contest = self.get_object()
+        return Response(integ.integrity_summary(contest))
 
     @action(detail=True, methods=["post"], url_path="reveal")
     def reveal(self, request, pk=None):

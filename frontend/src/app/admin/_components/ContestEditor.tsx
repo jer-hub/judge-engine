@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -15,13 +16,22 @@ import { ApiError, apiFetch } from "@/lib/api";
 
 import { AdminClarifications } from "./AdminClarifications";
 import { ContestResultsControls } from "./ContestResultsControls";
+import { IntegrityPanel } from "./IntegrityPanel";
 import { SimilarityPanel } from "./SimilarityPanel";
 import { fetchAllPages } from "@/lib/pagination";
-import type { AdminUser, ContestDetail, ProblemListItem } from "@/lib/types";
+import type {
+  AdminUser,
+  ContestDetail,
+  ContestEditorPhase,
+  ProblemListItem,
+} from "@/lib/types";
 
 type Props = {
   contestId: number;
   onClose: () => void;
+  phase: ContestEditorPhase;
+  onPhaseChange: (phase: ContestEditorPhase) => void;
+  onViewSubmissions?: () => void;
 };
 
 type ProblemRow = {
@@ -82,7 +92,13 @@ function rosterChanges(saved: string[], current: string[]) {
   };
 }
 
-export function ContestEditor({ contestId, onClose }: Props) {
+export function ContestEditor({
+  contestId,
+  onClose,
+  phase,
+  onPhaseChange,
+  onViewSubmissions,
+}: Props) {
   const queryClient = useQueryClient();
   const rootRef = useRef<HTMLFormElement>(null);
   const closeAfterRef = useRef(false);
@@ -92,6 +108,7 @@ export function ContestEditor({ contestId, onClose }: Props) {
   const savedParticipantsRef = useRef<string[]>([]);
   const savedMsgTimerRef = useRef<number | null>(null);
   const [pendingClose, setPendingClose] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -101,6 +118,8 @@ export function ContestEditor({ contestId, onClose }: Props) {
   const [freeze, setFreeze] = useState(0);
   const [holdResults, setHoldResults] = useState(false);
   const [practiceAfterEnd, setPracticeAfterEnd] = useState(false);
+  const [integrityMonitoring, setIntegrityMonitoring] = useState(true);
+  const [integrityStrict, setIntegrityStrict] = useState(false);
   const [problems, setProblems] = useState<ProblemRow[]>([]);
   const [participantSet, setParticipantSet] = useState<string[]>([]);
   const [rosterSearch, setRosterSearch] = useState("");
@@ -141,6 +160,8 @@ export function ContestEditor({ contestId, onClose }: Props) {
     setFreeze(c.freeze_scoreboard_minutes_before_end);
     setHoldResults(c.hold_results_until_revealed);
     setPracticeAfterEnd(c.practice_after_end);
+    setIntegrityMonitoring(c.integrity_monitoring !== false);
+    setIntegrityStrict(!!c.integrity_strict);
     setProblems(
       withLetters(
         c.problems.map((p) => ({
@@ -170,6 +191,26 @@ export function ContestEditor({ contestId, onClose }: Props) {
     return () => {
       if (savedMsgTimerRef.current) window.clearTimeout(savedMsgTimerRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isDirtyRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, []);
+
+  useEffect(() => {
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isDirtyRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
   const rosterUsernames = useMemo(() => {
@@ -255,6 +296,8 @@ export function ContestEditor({ contestId, onClose }: Props) {
           freeze_scoreboard_minutes_before_end: freeze,
           hold_results_until_revealed: holdResults,
           practice_after_end: practiceAfterEnd,
+          integrity_monitoring: integrityMonitoring,
+          integrity_strict: integrityStrict,
           problems: withLetters(problems),
           ...rosterChanges(savedParticipantsRef.current, participantSet),
         }),
@@ -404,65 +447,102 @@ export function ContestEditor({ contestId, onClose }: Props) {
 
   const durationLabel = formatDuration(startTime, endTime);
   const displayTitle = title.trim() || detail.data?.title || `Contest #${contestId}`;
+  const statusLabel = detail.data?.status ?? "…";
+  const checklistIncomplete =
+    problems.length === 0 || participantSet.length === 0;
+
+  function requestClose() {
+    if (isDirtyRef.current) {
+      setDiscardOpen(true);
+      return;
+    }
+    onClose();
+  }
+
+  const phases: Array<{ id: ContestEditorPhase; label: string }> = [
+    { id: "setup", label: "Setup" },
+    { id: "live", label: "Live" },
+    { id: "exports", label: "Exports" },
+  ];
 
   return (
     <form
       ref={rootRef}
       onSubmit={onSubmit}
-      className="mt-3 space-y-4 rounded-xl border border-slate-700 bg-slate-950/70 p-4"
+      className="space-y-4 rounded-xl border border-slate-700 bg-slate-950/70 p-4"
     >
-      <div className="flex items-center justify-between gap-3">
-        <h4 className="font-medium text-white">Edit · {displayTitle}</h4>
-        <button
-          type="button"
-          onClick={onClose}
-          className="cursor-pointer text-xs text-slate-400 hover:text-white"
+      <div className="sticky top-0 z-10 -mx-4 -mt-4 space-y-3 border-b border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={requestClose}
+              className="cursor-pointer text-xs text-slate-400 hover:text-white"
+            >
+              ← Contests
+            </button>
+            <h4 className="font-medium text-white">{displayTitle}</h4>
+            <span
+              className={`rounded-sm px-2 py-0.5 text-[10px] font-semibold uppercase ${
+                statusLabel === "active"
+                  ? "bg-emerald-900/50 text-emerald-300"
+                  : statusLabel === "upcoming"
+                    ? "bg-sky-900/50 text-sky-200"
+                    : "bg-slate-800 text-slate-400"
+              }`}
+            >
+              {statusLabel}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <Link
+              href={`/contests/${contestId}/scoreboard`}
+              className="text-slate-300 hover:text-white"
+            >
+              Scoreboard
+            </Link>
+            {onViewSubmissions && (
+              <button
+                type="button"
+                onClick={onViewSubmissions}
+                className="cursor-pointer text-emerald-300 hover:underline"
+              >
+                View submissions
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={requestClose}
+              className="cursor-pointer text-slate-400 hover:text-white"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+        <div
+          role="tablist"
+          aria-label="Contest workspace"
+          className="flex flex-wrap gap-1"
         >
-          Close
-        </button>
+          {phases.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              role="tab"
+              aria-selected={phase === p.id}
+              onClick={() => onPhaseChange(p.id)}
+              className={`cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                phase === p.id
+                  ? "bg-slate-800 text-white"
+                  : "text-slate-400 hover:bg-slate-900 hover:text-slate-200"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-sm border border-slate-800 bg-slate-900/40 p-3 text-xs">
-        <span className="text-slate-400">Results</span>
-        <select
-          aria-label="Section to export"
-          className="rounded-sm border border-slate-700 bg-slate-900 px-2 py-1"
-          value={exportSection}
-          onChange={(e) => setExportSection(e.target.value)}
-        >
-          <option value="">All sections</option>
-          {participantSections.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          onClick={() => void exportStandings()}
-          disabled={exporting}
-          className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
-        >
-          {exporting ? "Exporting…" : "Export standings (CSV)"}
-        </button>
-        <button
-          type="button"
-          onClick={() => void exportSolutions()}
-          disabled={exportingSolutions}
-          title="Every submitted solution as .java files per student and problem, plus index.csv"
-          className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
-        >
-          {exportingSolutions ? "Preparing…" : "Download solutions (ZIP)"}
-        </button>
-        <button
-          type="button"
-          onClick={() => setConfirmRejudge(true)}
-          disabled={rejudgeMutation.isPending}
-          className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-amber-300 transition hover:bg-slate-800 disabled:opacity-50"
-        >
-          Rejudge contest
-        </button>
-      </div>
       <ConfirmDialog
         open={confirmRejudge}
         title="Rejudge this contest?"
@@ -471,6 +551,18 @@ export function ContestEditor({ contestId, onClose }: Props) {
         busy={rejudgeMutation.isPending}
         onCancel={() => setConfirmRejudge(false)}
         onConfirm={() => rejudgeMutation.mutate()}
+      />
+      <ConfirmDialog
+        open={discardOpen}
+        title="Discard unsaved changes?"
+        body="You have unsaved Setup changes. Leave without saving?"
+        confirmLabel="Discard"
+        onCancel={() => setDiscardOpen(false)}
+        onConfirm={() => {
+          setDiscardOpen(false);
+          isDirtyRef.current = false;
+          onClose();
+        }}
       />
 
       {detail.isLoading && <p className="text-xs text-slate-500">Loading…</p>}
@@ -485,6 +577,66 @@ export function ContestEditor({ contestId, onClose }: Props) {
         </p>
       )}
 
+      {phase === "setup" && checklistIncomplete && (
+        <div className="rounded-sm border border-amber-900/50 bg-amber-950/20 px-3 py-2 text-xs text-amber-100">
+          Setup checklist:{" "}
+          {problems.length === 0 ? "attach at least one problem" : null}
+          {problems.length === 0 && participantSet.length === 0 ? "; " : null}
+          {participantSet.length === 0 ? "invite at least one participant" : null}.
+        </div>
+      )}
+
+      {phase === "live" && (
+        <p className="text-xs text-slate-500">
+          Live actions apply immediately — they are not part of Save.
+        </p>
+      )}
+
+      {phase === "exports" && (
+        <div className="flex flex-wrap items-center gap-2 rounded-sm border border-slate-800 bg-slate-900/40 p-3 text-xs">
+          <span className="text-slate-400">Results</span>
+          <select
+            aria-label="Section to export"
+            className="rounded-sm border border-slate-700 bg-slate-900 px-2 py-1"
+            value={exportSection}
+            onChange={(e) => setExportSection(e.target.value)}
+          >
+            <option value="">All sections</option>
+            {participantSections.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => void exportStandings()}
+            disabled={exporting}
+            className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
+          >
+            {exporting ? "Exporting…" : "Export standings (CSV)"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void exportSolutions()}
+            disabled={exportingSolutions}
+            title="Every submitted solution as .java files per student and problem, plus index.csv"
+            className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
+          >
+            {exportingSolutions ? "Preparing…" : "Download solutions (ZIP)"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmRejudge(true)}
+            disabled={rejudgeMutation.isPending}
+            className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-amber-300 transition hover:bg-slate-800 disabled:opacity-50"
+          >
+            Rejudge contest
+          </button>
+        </div>
+      )}
+
+      {phase === "setup" && (
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block text-sm sm:col-span-2">
           <span className="mb-1 block text-slate-400">Title</span>
@@ -623,12 +775,56 @@ export function ContestEditor({ contestId, onClose }: Props) {
             using them is still running.
           </span>
         </label>
+        <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+          <span className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={integrityMonitoring}
+              onChange={(e) => {
+                markDirty();
+                setIntegrityMonitoring(e.target.checked);
+              }}
+              className="cursor-pointer"
+            />
+            <span>Log integrity signals (focus / paste / submit IP)</span>
+          </span>
+          <span className="text-xs text-slate-500">
+            Warn-only leads for teachers — never auto-penalizes. Students see a one-time notice.
+          </span>
+        </label>
+        <label className="flex flex-col gap-1 text-sm sm:col-span-2">
+          <span className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={integrityStrict}
+              disabled={!integrityMonitoring}
+              onChange={(e) => {
+                markDirty();
+                setIntegrityStrict(e.target.checked);
+              }}
+              className="cursor-pointer"
+            />
+            <span>Strict: fullscreen + confirm before submit after leaving</span>
+          </span>
+          <span className="text-xs text-slate-500">
+            Soft-blocks Submit until a teacher unlocks the student (Integrity panel). Not an
+            automatic DQ; requires monitoring to be on.
+          </span>
+        </label>
       </div>
+      )}
 
-      {detail.data && <ContestResultsControls contest={detail.data} />}
-      {detail.data && <AdminClarifications contestId={detail.data.id} />}
-      {detail.data && <SimilarityPanel contestId={detail.data.id} />}
+      {phase === "live" && (
+        <div className="space-y-3">
+          {detail.data && <ContestResultsControls contest={detail.data} />}
+          {detail.data && <AdminClarifications contestId={detail.data.id} />}
+          {detail.data && <IntegrityPanel contestId={detail.data.id} />}
+          {detail.data && <SimilarityPanel contestId={detail.data.id} />}
+        </div>
+      )}
 
+      {phase === "setup" && (
+      <>
       <div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <h5 className="text-sm font-medium text-slate-200">
@@ -851,8 +1047,11 @@ export function ContestEditor({ contestId, onClose }: Props) {
           </button>
         </div>
       </div>
+      </>
+      )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      {phase === "setup" && (
+      <div className="sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-wrap items-center gap-2 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur-sm">
         <button
           type="submit"
           disabled={saveMutation.isPending}
@@ -870,12 +1069,13 @@ export function ContestEditor({ contestId, onClose }: Props) {
         </button>
         <button
           type="button"
-          onClick={onClose}
+          onClick={requestClose}
           className="cursor-pointer px-3 py-2 text-sm text-slate-400 hover:text-white"
         >
           Cancel
         </button>
       </div>
+      )}
     </form>
   );
 }

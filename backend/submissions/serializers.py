@@ -5,6 +5,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from contests.access import in_public_set, running_contest_with_problem, user_can_practice_problem
+from contests.integrity import assert_can_submit
 from contests.models import Contest, ContestParticipant
 from problems.models import Problem
 
@@ -122,6 +123,7 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"problem": "Problem is not part of this contest."}
                 )
+            assert_can_submit(contest, user)
         elif not getattr(user, "is_platform_admin", False):
             running = running_contest_with_problem(user, problem)
             if running is not None:
@@ -141,8 +143,14 @@ class SubmissionCreateSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        from accounts.client_ip import client_ip
+
+        request = self.context["request"]
+        ua = (request.META.get("HTTP_USER_AGENT") or "")[:512]
         return Submission.objects.create(
-            user=self.context["request"].user,
+            user=request.user,
             status=Submission.Status.PENDING,
+            client_ip=client_ip(request) or None,
+            user_agent=ua,
             **validated_data,
         )

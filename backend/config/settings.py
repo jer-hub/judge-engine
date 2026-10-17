@@ -225,6 +225,9 @@ REST_FRAMEWORK = {
         # throttled logout leaves the refresh token un-revoked.
         "logout": env("LOGOUT_THROTTLE_RATE", default="120/min"),
         "user-import": "6/min",
+        # Client integrity heartbeats during contests (batched blur/paste events).
+        "integrity-events": env("INTEGRITY_EVENT_THROTTLE_RATE", default="30/min"),
+        "integrity-unlock": env("INTEGRITY_UNLOCK_THROTTLE_RATE", default="30/min"),
     },
 }
 

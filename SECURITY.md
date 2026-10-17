@@ -67,6 +67,12 @@ We take the following seriously:
    - Monitor failed auth attempts
    - Archive logs securely
 
+7. **Contest integrity signals:**
+   - During monitored contests the platform may store **client IP**, truncated **User-Agent**, and aggregated **focus/paste/fullscreen event counts** for registered students
+   - Clipboard **contents are never stored** (paste events may include character counts only)
+   - Data is visible to **admins only** and is intended as review leads, not automatic penalties
+   - Teachers can disable monitoring (`integrity_monitoring`) or enable **strict** mode (`integrity_strict`): fullscreen is requested in the browser (best-effort; students can refuse/exit) and Submit is **soft-blocked** until a **teacher unlocks** the student — never an automatic DQ
+
 ## Dependency Security
 
 ### Automated Scanning

@@ -27,6 +27,18 @@ class Contest(models.Model):
         default=False,
         help_text="After the contest, anyone who could see it may practice its problems.",
     )
+    integrity_monitoring = models.BooleanField(
+        default=True,
+        help_text="Log focus/paste signals and show them to admins (warn-only; never auto-penalize).",
+    )
+    integrity_strict = models.BooleanField(
+        default=False,
+        help_text="Require fullscreen and soft-block submit until a teacher unlocks the student.",
+    )
+    is_archived = models.BooleanField(
+        default=False,
+        help_text="Hidden from students; admins can still manage or permanently delete.",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -136,6 +148,11 @@ class ContestParticipant(models.Model):
     # Per-student time extension (accommodations, a late start): this student
     # may keep submitting this many minutes past the contest end.
     extra_minutes = models.PositiveIntegerField(default=0)
+    # Strict integrity soft-block (cleared by teacher unlock; never auto-DQ).
+    integrity_blocked = models.BooleanField(default=False)
+    integrity_ack_count = models.PositiveIntegerField(default=0)
+    integrity_focus_since_ack = models.PositiveIntegerField(default=0)
+    integrity_paste_since_ack = models.PositiveIntegerField(default=0)
 
     class Meta:
         unique_together = (("contest", "user"),)
@@ -191,3 +208,48 @@ class Clarification(models.Model):
     @property
     def is_announcement(self) -> bool:
         return not self.question
+
+
+class ContestIntegrityEvent(models.Model):
+    """Warn-only proctoring signal from a student's browser during a contest.
+
+    Leads for teachers to review — never used for automatic penalties.
+    Clipboard contents are never stored (paste meta may include char counts only).
+    """
+
+    class EventType(models.TextChoices):
+        VISIBILITY_HIDDEN = "visibility_hidden", "Tab hidden"
+        VISIBILITY_VISIBLE = "visibility_visible", "Tab visible"
+        WINDOW_BLUR = "window_blur", "Window blur"
+        WINDOW_FOCUS = "window_focus", "Window focus"
+        EDITOR_PASTE = "editor_paste", "Editor paste"
+        FULLSCREEN_EXIT = "fullscreen_exit", "Fullscreen exit"
+        FULLSCREEN_ENTER = "fullscreen_enter", "Fullscreen enter"
+        SOFT_BLOCK_ACK = "soft_block_ack", "Teacher unlock"
+
+    contest = models.ForeignKey(
+        Contest,
+        on_delete=models.CASCADE,
+        related_name="integrity_events",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="contest_integrity_events",
+    )
+    event_type = models.CharField(max_length=32, choices=EventType.choices)
+    count = models.PositiveIntegerField(default=1)
+    meta = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(
+                fields=["contest", "user", "event_type", "created_at"],
+                name="contests_in_contest_8f3a1b_idx",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id} {self.event_type} x{self.count} @ {self.contest_id}"

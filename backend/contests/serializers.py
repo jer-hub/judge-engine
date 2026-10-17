@@ -48,6 +48,9 @@ class ContestParticipantSerializer(serializers.ModelSerializer):
 class ContestListSerializer(serializers.ModelSerializer):
     status = serializers.CharField(read_only=True)
     problem_count = serializers.SerializerMethodField()
+    blocked_count = serializers.SerializerMethodField()
+    clarifications_waiting = serializers.SerializerMethodField()
+    results_held = serializers.SerializerMethodField()
 
     class Meta:
         model = Contest
@@ -60,10 +63,39 @@ class ContestListSerializer(serializers.ModelSerializer):
             "status",
             "freeze_scoreboard_minutes_before_end",
             "problem_count",
+            "integrity_monitoring",
+            "integrity_strict",
+            "hold_results_until_revealed",
+            "results_held",
+            "is_archived",
+            "blocked_count",
+            "clarifications_waiting",
         )
 
     def get_problem_count(self, obj: Contest) -> int:
+        annotated = getattr(obj, "problem_count", None)
+        if annotated is not None:
+            return int(annotated)
         return obj.contest_problems.count()
+
+    def get_blocked_count(self, obj: Contest) -> int:
+        annotated = getattr(obj, "blocked_count", None)
+        if annotated is not None:
+            return int(annotated)
+        return obj.participants.filter(integrity_blocked=True).count()
+
+    def get_clarifications_waiting(self, obj: Contest) -> int:
+        annotated = getattr(obj, "clarifications_waiting", None)
+        if annotated is not None:
+            return int(annotated)
+        return obj.clarifications.filter(
+            answered_at__isnull=True, question__gt=""
+        ).count()
+
+    def get_results_held(self, obj: Contest) -> bool:
+        if not obj.hold_results_until_revealed:
+            return False
+        return obj.results_revealed_at is None
 
 
 class ContestDetailSerializer(serializers.ModelSerializer):
@@ -78,6 +110,7 @@ class ContestDetailSerializer(serializers.ModelSerializer):
     # The viewer's own window, which a time extension moves past end_time.
     my_end_time = serializers.SerializerMethodField()
     my_status = serializers.SerializerMethodField()
+    my_integrity_blocked = serializers.SerializerMethodField()
 
     class Meta:
         model = Contest
@@ -94,12 +127,15 @@ class ContestDetailSerializer(serializers.ModelSerializer):
             "hold_results_until_revealed",
             "results_revealed_at",
             "practice_after_end",
+            "integrity_monitoring",
+            "integrity_strict",
             "problems",
             "participants",
             "is_registered",
             "server_time",
             "my_end_time",
             "my_status",
+            "my_integrity_blocked",
         )
 
     def get_is_registered(self, obj: Contest) -> bool:
@@ -127,6 +163,16 @@ class ContestDetailSerializer(serializers.ModelSerializer):
         if now < obj.start_time:
             return "upcoming"
         return "active" if now <= self._my_end(obj) else "past"
+
+    def get_my_integrity_blocked(self, obj: Contest) -> bool:
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        if not obj.integrity_monitoring or not obj.integrity_strict:
+            return False
+        return ContestParticipant.objects.filter(
+            contest=obj, user=request.user, integrity_blocked=True
+        ).exists()
 
     def to_representation(self, instance: Contest):
         data = super().to_representation(instance)
@@ -195,6 +241,8 @@ class ContestWriteSerializer(serializers.ModelSerializer):
             "freeze_scoreboard_minutes_before_end",
             "hold_results_until_revealed",
             "practice_after_end",
+            "integrity_monitoring",
+            "integrity_strict",
             "problems",
             "participant_usernames",
             "participants_add",

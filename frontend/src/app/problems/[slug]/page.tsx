@@ -9,6 +9,7 @@ import { ContestProblemBanner } from "@/components/ContestProblemBanner";
 import { MySubmissions, mySubmissionsKey } from "@/components/MySubmissions";
 import { StatementContent } from "@/components/StatementContent";
 import { SubmissionStatus, VerdictBadge } from "@/components/SubmissionStatus";
+import { useContestIntegrity } from "@/hooks/useContestIntegrity";
 import { ApiError, apiFetch } from "@/lib/api";
 import { draftKey, loadDraft, saveDraft } from "@/lib/drafts";
 import type { ContestDetail, ProblemDetail, RunPreview, Submission, User } from "@/lib/types";
@@ -55,6 +56,39 @@ function ProblemDetailInner() {
   // The contest is running but this user never registered: the API would
   // refuse the submission, so say so up front.
   const mustRegister = !!contest && contest.my_status === "active" && !contest.is_registered;
+  const integrityOn =
+    !!contest &&
+    contest.my_status === "active" &&
+    contest.is_registered &&
+    contest.integrity_monitoring !== false;
+  const integrityStrict = integrityOn && !!contest?.integrity_strict;
+  const {
+    notice: integrityNotice,
+    dismissNotice,
+    recordPaste,
+    blocked: integrityBlocked,
+    setBlocked: setIntegrityBlocked,
+    fullscreenOk,
+    requestFullscreen,
+  } = useContestIntegrity(
+    contestId ? Number(contestId) : null,
+    integrityOn,
+    integrityStrict,
+    !!contest?.my_integrity_blocked,
+  );
+  // Prefer server flag when contest detail refreshes (teacher unlock).
+  useEffect(() => {
+    if (contest?.my_integrity_blocked != null) {
+      setIntegrityBlocked(!!contest.my_integrity_blocked);
+    }
+  }, [contest?.my_integrity_blocked, setIntegrityBlocked]);
+
+  // While soft-blocked, poll so a teacher unlock shows up without a full reload.
+  useEffect(() => {
+    if (!integrityStrict || !integrityBlocked || !contestId) return;
+    const t = window.setInterval(() => void contestQuery.refetch(), 8_000);
+    return () => window.clearInterval(t);
+  }, [integrityStrict, integrityBlocked, contestId, contestQuery]);
 
   const { data: me } = useQuery({
     queryKey: ["me"],
@@ -102,8 +136,12 @@ function ProblemDetailInner() {
     },
     // A refusal often means the contest window or registration changed since
     // the page loaded; refresh it so the button reflects that.
-    onError: () => {
+    onError: (err) => {
       if (contestId) void contestQuery.refetch();
+      const msg = (err as Error)?.message?.toLowerCase?.() ?? "";
+      if (msg.includes("soft-block") || msg.includes("teacher")) {
+        setIntegrityBlocked(true);
+      }
     },
   });
 
@@ -167,6 +205,18 @@ function ProblemDetailInner() {
   const busy = submit.isPending || run.isPending;
   // Practice "Run" stays available after the contest; graded Submit doesn't.
   const submitBlocked = busy || contestOver || mustRegister;
+
+  async function handleSubmitClick() {
+    run.reset();
+    if (integrityStrict && !fullscreenOk) {
+      await requestFullscreen();
+      return;
+    }
+    if (integrityStrict && integrityBlocked) {
+      return;
+    }
+    submit.mutate();
+  }
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
@@ -233,7 +283,50 @@ function ProblemDetailInner() {
       </section>
 
       <section className="space-y-4">
-        <CodeEditor value={code} onChange={setCode} />
+        {integrityStrict && !fullscreenOk && (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-red-800/70 bg-red-950/50 px-3 py-3 text-sm text-red-100"
+          >
+            <p>Strict mode requires fullscreen. Enter fullscreen to continue working on this contest.</p>
+            <button
+              type="button"
+              onClick={() => void requestFullscreen()}
+              className="cursor-pointer rounded-sm bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500"
+            >
+              Enter fullscreen
+            </button>
+          </div>
+        )}
+        {integrityStrict && integrityBlocked && (
+          <div
+            role="alert"
+            className="rounded-sm border border-amber-800/70 bg-amber-950/50 px-3 py-2 text-sm text-amber-100"
+          >
+            Soft-block active: ask a teacher to unlock your submissions for this contest.
+            This page checks every few seconds after they unlock you.
+          </div>
+        )}
+        {integrityNotice && (
+          <div
+            role="status"
+            className="flex items-start justify-between gap-3 rounded-sm border border-amber-800/60 bg-amber-950/40 px-3 py-2 text-xs text-amber-100"
+          >
+            <p>{integrityNotice}</p>
+            <button
+              type="button"
+              onClick={dismissNotice}
+              className="shrink-0 cursor-pointer text-amber-200/80 hover:text-white"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+        <CodeEditor
+          value={code}
+          onChange={setCode}
+          onPasteChars={integrityOn ? recordPaste : undefined}
+        />
 
         <div>
           <div className="mb-1 flex items-center justify-between text-sm">
@@ -275,21 +368,30 @@ function ProblemDetailInner() {
           </button>
           <button
             type="button"
-            onClick={() => {
-              run.reset();
-              submit.mutate();
-            }}
-            disabled={submitBlocked}
+            onClick={() => void handleSubmitClick()}
+            disabled={
+              submitBlocked ||
+              (integrityStrict && !fullscreenOk) ||
+              (integrityStrict && integrityBlocked)
+            }
             title={
               contestOver
                 ? "This contest is over for you"
                 : mustRegister
                   ? "Register for the contest to submit"
-                  : undefined
+                  : integrityStrict && !fullscreenOk
+                    ? "Enter fullscreen first"
+                    : integrityStrict && integrityBlocked
+                      ? "Waiting for a teacher to unlock"
+                      : undefined
             }
             className="rounded-sm bg-emerald-600 px-4 py-2 font-medium hover:bg-emerald-500 disabled:opacity-60"
           >
-            {submit.isPending ? "Submitting…" : "Submit Java"}
+            {submit.isPending
+              ? "Submitting…"
+              : integrityStrict && integrityBlocked
+                ? "Submit (locked)"
+                : "Submit Java"}
           </button>
           {mustRegister && (
             <span className="text-sm text-amber-300">

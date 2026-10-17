@@ -85,12 +85,23 @@ Judge Engine is a **school-based competitive programming platform** where studen
 User (role: admin/student)
   ├─ Problem (title, slug, difficulty, time_limit_ms, memory_limit_mb, is_published)
   │  └─ TestCase (input, expected output, is_sample — hidden unless a sample)
-  ├─ Submission (source, status, judge_claim, judged_at)
+  ├─ Submission (source, status, judge_claim, judged_at, client_ip, user_agent)
   │  └─ SubmissionResult (per test case: verdict, time, output snippets)
-  └─ Contest (start_time, end_time, freeze_scoreboard_minutes_before_end)
+  └─ Contest (start_time, end_time, freeze, integrity_monitoring)
      ├─ ContestProblem (problem, letter, display_order)
-     └─ ContestParticipant (user)
+     ├─ ContestParticipant (user)
+     └─ ContestIntegrityEvent (warn-only blur/paste/visibility signals)
 ```
+
+**Contest integrity:**
+
+| Mode | Behavior |
+|------|----------|
+| Off (`integrity_monitoring=false`) | No client signals |
+| Monitor (default) | Log focus/paste/IP; admin review only |
+| Strict (`integrity_strict=true`) | Fullscreen prompt; soft-block Submit until teacher `POST …/integrity-unlock/`; server rejects blocked contest submits |
+
+Client batches events to `POST /api/contests/{id}/integrity-events/`. Admins review `GET /api/contests/{id}/integrity/`. Never auto-DQ; clipboard text is not stored.
 
 **Authentication:**
 - JWT cookies (access token, refresh token)

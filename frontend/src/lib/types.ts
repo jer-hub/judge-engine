@@ -73,7 +73,17 @@ export type ContestListItem = {
   status: "upcoming" | "active" | "past";
   freeze_scoreboard_minutes_before_end: number;
   problem_count?: number;
+  integrity_monitoring?: boolean;
+  integrity_strict?: boolean;
+  hold_results_until_revealed?: boolean;
+  results_held?: boolean;
+  is_archived?: boolean;
+  blocked_count?: number;
+  clarifications_waiting?: number;
 };
+
+export type ContestEditorPhase = "setup" | "live" | "exports";
+
 
 export type ContestDetail = ContestListItem & {
   description: string;
@@ -83,6 +93,12 @@ export type ContestDetail = ContestListItem & {
   hold_results_until_revealed: boolean;
   results_revealed_at: string | null;
   practice_after_end: boolean;
+  /** When true, client may send focus/paste signals for teacher review. */
+  integrity_monitoring: boolean;
+  /** Fullscreen + soft-block submit until a teacher unlocks. */
+  integrity_strict: boolean;
+  /** Viewer soft-block state (strict mode only). */
+  my_integrity_blocked: boolean;
   /** The viewer's own window: a time extension moves it past end_time. */
   my_end_time: string;
   my_status: "upcoming" | "active" | "past";
