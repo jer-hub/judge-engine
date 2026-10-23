@@ -46,7 +46,7 @@ django-cors-headers==4.9.0
     # via -r requirements.in
 django-environ==0.14.0
     # via -r requirements.in
-djangorestframework==3.18.1
+djangorestframework==3.18.3
     # via
     #   -r requirements.in
     #   djangorestframework-simplejwt
@@ -60,7 +60,7 @@ idna==3.20
     # via requests
 kombu==5.6.2
     # via celery
-markdown==3.11
+markdown==3.11.2
     # via -r requirements.in
 packaging==26.3
     # via
