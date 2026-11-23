@@ -33,9 +33,8 @@ export default function LoginPage() {
         );
         return;
       }
-      // The NavBar stays mounted across navigation and has a cached 401 for
-      // "me" from before login; drop it (and anything else) and refetch.
-      await queryClient.resetQueries();
+      // Drop any cached queries from before login so NavBar/pages fetch fresh.
+      queryClient.clear();
       router.push(
         safeNextPath(
           new URLSearchParams(window.location.search).get("next"),
@@ -78,7 +77,11 @@ export default function LoginPage() {
             required
           />
         </label>
-        {error && <p className="text-sm text-red-300">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-red-300">
+            {error}
+          </p>
+        )}
         <button
           type="submit"
           disabled={loading}

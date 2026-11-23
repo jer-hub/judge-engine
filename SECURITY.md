@@ -54,7 +54,7 @@ We take the following seriously:
    - Review Docker image updates (`eclipse-temurin:17-jdk-jammy`)
    - Consider additional seccomp/AppArmor profiles if deploying on untrusted hardware
    - Sandboxes run as `nobody` (uid 65534) with a job folder only that user can open. For a stronger boundary, install gVisor on the Docker host and set `JUDGE_RUNTIME=runsc`; enabling Docker's `userns-remap` also keeps sandbox uids from mapping to real host users
-   - **The judge workers mount `/var/run/docker.sock`.** Docker socket access is equivalent to root on the host, so a compromise of a worker container (or of a dependency it loads) is a host compromise. Run the stack on a dedicated machine/VM, keep worker images minimal and patched, and never expose the Docker API over TCP. A rootless Docker daemon or a socket proxy that only allows container create/start/attach/inspect/kill/remove narrows this further.
+   - **The judge workers reach Docker via an isolated `docker-proxy` (`tecnativa/docker-socket-proxy`).** Workers drop all capabilities except minimal workspace file ownership (`CHOWN`, `DAC_OVERRIDE`, `FOWNER`) and cannot call `/exec`, `/volumes`, `/networks`, `/swarm`, or `/system`, though container creation with host bind mounts still requires a dedicated machine/VM. Keep worker images minimal and patched, never expose `docker-proxy` outside the internal `docker_proxy` network, and consider rootless Docker or `JUDGE_RUNTIME=runsc` (gVisor) to narrow the boundary further.
    - Monitor judge logs for crashes or anomalies
 
 5. **Restrict network access:**

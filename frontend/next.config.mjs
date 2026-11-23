@@ -23,6 +23,18 @@ const csp = [
 const nextConfig = {
   // Self-contained server for the production Docker image (frontend/Dockerfile).
   output: "standalone",
+  webpack(config) {
+    config.watchOptions = {
+      ...config.watchOptions,
+      ignored: [
+        "**/node_modules/**",
+        "**/.git/**",
+        "**/playwright-report/**",
+        "**/test-results/**",
+      ],
+    };
+    return config;
+  },
   async headers() {
     return [
       {

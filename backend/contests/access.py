@@ -101,6 +101,26 @@ def running_contest_with_problem(user, problem) -> Contest | None:
     ).first()
 
 
+def active_contests_for_problem(user, problem) -> list[dict]:
+    """Running non-archived contests for ``user`` that contain ``problem``."""
+    if not user or not user.is_authenticated:
+        return []
+    contest_ids = _active_participations(user).values_list("contest_id", flat=True)
+    rows = (
+        ContestProblem.objects.filter(
+            problem=problem,
+            contest_id__in=contest_ids,
+            contest__is_archived=False,
+        )
+        .select_related("contest")
+        .order_by("-contest__start_time", "display_order")
+    )
+    return [
+        {"id": cp.contest_id, "title": cp.contest.title, "letter": cp.letter}
+        for cp in rows
+    ]
+
+
 def user_can_practice_problem(user, problem) -> bool:
     """True if the user may submit this unpublished problem as practice."""
     return practice_problem_ids(user).filter(problem_id=problem.pk).exists()

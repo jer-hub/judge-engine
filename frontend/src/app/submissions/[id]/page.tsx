@@ -8,6 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { VerdictBadge, verdictLabel } from "@/components/SubmissionStatus";
 import { ApiError, apiFetch } from "@/lib/api";
+import { problemHref } from "@/lib/contest-context";
 import type { Submission, User } from "@/lib/types";
 
 export default function SubmissionDetailPage() {
@@ -60,7 +61,7 @@ export default function SubmissionDetailPage() {
           </p>
           <h1 className="mt-1 text-2xl font-semibold text-white">
             <Link
-              href={`/problems/${data.problem_slug}`}
+              href={problemHref(data.problem_slug, data.contest)}
               className="text-emerald-300 hover:underline"
             >
               {data.problem_title || data.problem_slug}
@@ -69,7 +70,14 @@ export default function SubmissionDetailPage() {
           <p className="mt-1 text-sm text-slate-400">
             {data.username} · {data.language} ·{" "}
             {new Date(data.submitted_at).toLocaleString()}
-            {data.contest != null ? ` · Contest #${data.contest}` : ""}
+            {data.contest != null && (
+              <>
+                {" · "}
+                <Link href={`/contests/${data.contest}`} className="text-emerald-300 hover:underline">
+                  Contest #{data.contest}
+                </Link>
+              </>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-3">

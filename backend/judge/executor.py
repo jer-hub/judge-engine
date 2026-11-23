@@ -239,7 +239,7 @@ class JudgeExecutor:
             if compile_result.timed_out:
                 raise CompileTimeout("Compilation timed out")
             if compile_result.exit_code not in (0,):
-                err = (compile_result.stderr or compile_result.stdout).strip()
+                err = _sanitize_compile_error(compile_result.stderr or compile_result.stdout)
                 return {
                     "status": "CompileError",
                     "compile_error": err or "Compilation failed.",
@@ -346,7 +346,7 @@ class JudgeExecutor:
                 # means the host is overloaded, so retry rather than blame.
                 raise SandboxError("Compilation timed out")
             if compile_result.exit_code not in (0,):
-                err = (compile_result.stderr or compile_result.stdout).strip()
+                err = _sanitize_compile_error(compile_result.stderr or compile_result.stdout)
                 return {
                     "status": "CompileError",
                     "compile_error": err or "Compilation failed.",
@@ -698,3 +698,8 @@ def normalize_output(text: str) -> str:
     while lines and lines[-1] == "":
         lines.pop()
     return "\n".join(lines)
+
+
+def _sanitize_compile_error(raw: str) -> str:
+    """Strip internal sandbox mount paths (/work/) from javac diagnostics."""
+    return (raw or "").replace("/work/", "").strip()

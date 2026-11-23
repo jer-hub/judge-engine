@@ -67,6 +67,12 @@ class SubmissionViewSet(
         if me == "me":
             qs = qs.filter(user=user)
 
+        status_filter = (self.request.query_params.get("status") or "").strip()
+        if status_filter:
+            if status_filter not in Submission.Status.values:
+                raise ValidationError({"status": "Invalid submission status."})
+            qs = qs.filter(status=status_filter)
+
         return qs
 
     def get_serializer_class(self):

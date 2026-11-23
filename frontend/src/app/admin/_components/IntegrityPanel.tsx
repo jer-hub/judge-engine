@@ -5,46 +5,29 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { formatApiErrorPayload } from "@/lib/admin";
 import { ApiError, apiFetch } from "@/lib/api";
+import type { BulkUnlockResult, IntegritySummary } from "@/lib/types";
 
-type RecentEvent = {
-  type: string;
-  count: number;
-  meta: Record<string, unknown>;
-  created_at: string;
-};
-
-type StudentRow = {
-  user_id: number;
-  username: string;
-  visibility_hidden: number;
-  window_blur: number;
-  editor_paste: number;
-  fullscreen_exit?: number;
-  submit_ips: string[];
-  shared_ip_with: string[];
-  blocked?: boolean;
-  ack_count?: number;
-  recent_events: RecentEvent[];
-};
-
-type IntegritySummary = {
-  contest_id: number;
-  integrity_monitoring: boolean;
-  integrity_strict?: boolean;
-  students: StudentRow[];
-  event_counts: number;
-};
-
-/** Admin: warn-only focus/paste/IP leads; unlock soft-blocked students. */
+/** Admin: warn-only focus/paste/IP leads; unlock soft-blocked students individually or in bulk. */
 export function IntegrityPanel({ contestId }: { contestId: number }) {
   const queryClient = useQueryClient();
   const [openUser, setOpenUser] = useState<number | null>(null);
   const [unlockErrors, setUnlockErrors] = useState<Record<string, string>>({});
+  const [bulkStatus, setBulkStatus] = useState<{ text: string; isError: boolean } | null>(
+    null,
+  );
 
   const { data, isFetching, error, refetch, isFetched } = useQuery({
     queryKey: ["admin", "integrity", contestId],
     queryFn: () => apiFetch<IntegritySummary>(`/contests/${contestId}/integrity/`),
   });
+
+  const invalidateContestQueries = () => {
+    void refetch();
+    void queryClient.invalidateQueries({ queryKey: ["admin", "contest", contestId] });
+    void queryClient.invalidateQueries({ queryKey: ["contest", String(contestId)] });
+    void queryClient.invalidateQueries({ queryKey: ["admin", "contests", "list"] });
+    void queryClient.invalidateQueries({ queryKey: ["admin", "contests", "metrics"] });
+  };
 
   const unlock = useMutation({
     mutationFn: (username: string) =>
@@ -53,17 +36,14 @@ export function IntegrityPanel({ contestId }: { contestId: number }) {
         body: JSON.stringify({ username }),
       }),
     onSuccess: (_data, username) => {
+      setBulkStatus(null);
       setUnlockErrors((prev) => {
         if (!(username in prev)) return prev;
         const next = { ...prev };
         delete next[username];
         return next;
       });
-      void refetch();
-      void queryClient.invalidateQueries({ queryKey: ["admin", "contest", contestId] });
-      void queryClient.invalidateQueries({ queryKey: ["contest", String(contestId)] });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "contests", "list"] });
-      void queryClient.invalidateQueries({ queryKey: ["admin", "contests", "metrics"] });
+      invalidateContestQueries();
     },
     onError: (err: Error, username) => {
       setUnlockErrors((prev) => ({
@@ -76,7 +56,39 @@ export function IntegrityPanel({ contestId }: { contestId: number }) {
     },
   });
 
+  const unlockAll = useMutation({
+    mutationFn: () =>
+      apiFetch<BulkUnlockResult>(`/contests/${contestId}/integrity-unlock/`, {
+        method: "POST",
+        body: JSON.stringify({ unlock_all: true }),
+      }),
+    onMutate: () => {
+      setBulkStatus(null);
+    },
+    onSuccess: (res) => {
+      setUnlockErrors({});
+      setBulkStatus({
+        text:
+          res.unlocked_count > 0
+            ? `Unlocked ${res.unlocked_count} student${res.unlocked_count === 1 ? "" : "s"}.`
+            : "No blocked students needed unlocking.",
+        isError: false,
+      });
+      invalidateContestQueries();
+    },
+    onError: (err: Error) => {
+      setBulkStatus({
+        text:
+          err instanceof ApiError
+            ? formatApiErrorPayload(err.payload, err.message)
+            : err.message,
+        isError: true,
+      });
+    },
+  });
+
   const students = data?.students ?? [];
+  const blockedStudents = students.filter((s) => !!s.blocked);
   const flagged = students.filter(
     (s) =>
       !!s.blocked ||
@@ -97,11 +109,32 @@ export function IntegrityPanel({ contestId }: { contestId: number }) {
         >
           {isFetching ? "Refreshing…" : isFetched ? "Refresh" : "Load"}
         </button>
+        {blockedStudents.length > 0 && (
+          <button
+            type="button"
+            disabled={unlockAll.isPending}
+            onClick={() => unlockAll.mutate()}
+            className="cursor-pointer rounded-sm border border-emerald-700 bg-emerald-950/40 px-3 py-1 text-xs font-medium text-emerald-200 hover:bg-emerald-900/50 disabled:opacity-50"
+          >
+            {unlockAll.isPending
+              ? "Unlocking all…"
+              : `Unlock all blocked (${blockedStudents.length})`}
+          </button>
+        )}
         <span className="text-xs text-slate-500">
           Leads for review, not proof of cheating. Clipboard text is never stored.
           Soft-blocked students wait for a teacher unlock here.
         </span>
       </div>
+
+      {bulkStatus && (
+        <p
+          role="status"
+          className={`text-xs ${bulkStatus.isError ? "text-red-300" : "text-emerald-300"}`}
+        >
+          {bulkStatus.text}
+        </p>
+      )}
 
       {error && (
         <p className="text-xs text-red-300">
@@ -119,13 +152,14 @@ export function IntegrityPanel({ contestId }: { contestId: number }) {
 
       {data?.integrity_strict && (
         <p className="text-xs text-emerald-300/90">
-          Strict mode on: fullscreen required; Submit soft-blocks until you unlock the student.
+          Strict mode on: fullscreen required; exiting fullscreen, repeated tab switches, or heavy pasting soft-blocks Submit until unlocked.
         </p>
       )}
 
       {data && (
         <p className="text-xs text-slate-500">
           {data.event_counts} event row{data.event_counts === 1 ? "" : "s"} stored
+          {blockedStudents.length > 0 ? ` · ${blockedStudents.length} currently blocked` : ""}
           {flagged.length > 0 ? ` · ${flagged.length} student(s) with notable signals` : ""}
         </p>
       )}

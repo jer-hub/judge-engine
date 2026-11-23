@@ -67,7 +67,7 @@ docker compose exec backend python manage.py seed_demo
 
 Change the admin password after first login. Full classroom walkthrough: [DEMO.md](DEMO.md).
 
-To add practice problem sets to the demo, run `seed_demo` with `--array-techniques` (10 Java array-technique problems) and/or `--number-theory` (8 Java number theory problems). On a production server, load the same sets with `python manage.py seed_array_techniques --draft` and `python manage.py seed_number_theory --draft`, which leave the problems unpublished until you publish them.
+To add practice problem sets to the demo, run `seed_demo` with `--array-techniques` (10 Java array-technique problems), `--number-theory` (8 Java number theory problems), and/or `--icpc-davao` (10 Davao Regional ICPC Java training problems). On a production server, load the same sets with `python manage.py seed_array_techniques --draft`, `python manage.py seed_number_theory --draft`, and `python manage.py seed_icpc_davao --draft`, which leave the problems unpublished until you publish them.
 
 ### Smoke test
 
@@ -92,6 +92,7 @@ Copy `.env.example` → `.env`. Important variables:
 | Variable | Notes |
 |----------|--------|
 | `DJANGO_SECRET_KEY` | ≥50 random chars when `DJANGO_DEBUG=False` |
+| `REDIS_PASSWORD` | ≥16 random chars when `DJANGO_DEBUG=False` (dev default refused in prod) |
 | `JUDGE_HOST_DATA_DIR` | Leave unset (detected automatically); set an absolute host path only if detection fails |
 | `DEV_BIND` | Dev only: `127.0.0.1` (default) or `0.0.0.0` to open ports 3000/8000 to the LAN |
 | `JUDGE_STALE_SECONDS` | When stuck or lost judging is re-queued automatically (default 900) |
@@ -120,6 +121,7 @@ Caddy is the only public entry point and gets an HTTPS certificate for `SITE_ADD
 - [ ] `DJANGO_CSRF_TRUSTED_ORIGINS`: `https://` + the hostname (needed for the Django Admin login)
 - [ ] `BOOTSTRAP_ADMIN_PASSWORD`: your own strong password. The admin is created on first start; the dev default from this README is refused
 - [ ] `POSTGRES_PASSWORD`: change it from the dev default
+- [ ] `REDIS_PASSWORD`: at least 16 random characters (and update `REDIS_URL`, `CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND`; the dev default is refused when `DJANGO_DEBUG=False`)
 - [ ] `JUDGE_CONCURRENCY` + `JUDGE_PREVIEW_CONCURRENCY`: below the host's CPU cores (each sandbox gets 1 CPU); raise the `*_CPUS` / `*_MEM_LIMIT` caps in `docker-compose.prod.yml` on bigger hosts
 
 Backups run nightly into `./backups` (see [docs/BACKUPS.md](docs/BACKUPS.md)); copy them off the machine. Keep the `worker` service at one instance: it also runs the stuck-submission recovery sweep. See [SECURITY.md](SECURITY.md).

@@ -324,6 +324,27 @@ class ExecutorLimitsTests(SimpleTestCase):
             with self.assertRaises(CompileTimeout):
                 executor.judge_submission_source("class Solution {}", [], 1000, 256)
 
+    @patch("judge.executor.docker.from_env")
+    def test_compile_error_strips_internal_work_path(self, mocked_from_env):
+        executor, _ = self._executor(mocked_from_env)
+        compile_failed = RunResult(
+            verdict="OK",
+            stdout="",
+            stderr="/work/Solution.java:3: error: ';' expected\n",
+            execution_time_ms=120,
+            exit_code=1,
+        )
+        with patch.object(executor, "ensure_image"), \
+                patch.object(executor, "_run_container", return_value=compile_failed), \
+                patch.object(executor, "_host_data_dir", "/srv/judge_data"), \
+                patch.object(executor, "data_dir", Path(tempfile.mkdtemp())):
+            sub_res = executor.judge_submission_source("class Solution {}", [], 1000, 256)
+            prev_res = executor.preview_run("class Solution {}", "", 1000, 256)
+        self.assertNotIn("/work/", sub_res["compile_error"])
+        self.assertIn("Solution.java:3: error", sub_res["compile_error"])
+        self.assertNotIn("/work/", prev_res["compile_error"])
+        self.assertNotIn("/work/", prev_res["stderr"])
+
 
 class OutputPumpTests(SimpleTestCase):
     def test_demuxes_split_frames(self):

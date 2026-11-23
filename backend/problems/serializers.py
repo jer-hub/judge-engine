@@ -109,6 +109,7 @@ class ProblemAdminListSerializer(ProblemListSerializer):
 class ProblemDetailSerializer(serializers.ModelSerializer):
     tags = serializers.SerializerMethodField()
     sample_tests = serializers.SerializerMethodField()
+    active_contests = serializers.SerializerMethodField()
 
     class Meta:
         model = Problem
@@ -124,6 +125,7 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
             "is_published",
             "run_all_tests",
             "sample_tests",
+            "active_contests",
         )
 
     def get_tags(self, obj: Problem) -> list[str]:
@@ -132,6 +134,13 @@ class ProblemDetailSerializer(serializers.ModelSerializer):
     def get_sample_tests(self, obj: Problem) -> list[dict]:
         samples = obj.test_cases.filter(is_sample=True)
         return SampleTestCaseSerializer(samples, many=True).data
+
+    def get_active_contests(self, obj: Problem) -> list[dict]:
+        from contests.access import active_contests_for_problem
+
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        return active_contests_for_problem(user, obj)
 
 
 class ProblemWriteSerializer(serializers.ModelSerializer):

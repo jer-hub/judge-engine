@@ -15,6 +15,14 @@ type Props = {
   onCancel: () => void;
 };
 
+function focusableIn(root: HTMLElement): HTMLElement[] {
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((el) => !el.hasAttribute("disabled") && el.tabIndex !== -1);
+}
+
 export function ConfirmDialog({
   open,
   title,
@@ -27,6 +35,8 @@ export function ConfirmDialog({
   onCancel,
 }: Props) {
   const titleId = useId();
+  const bodyId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   // Callers pass inline arrows; read the latest through a ref so a parent
@@ -40,7 +50,23 @@ export function ConfirmDialog({
     // A destructive action should not be one stray Enter away.
     (danger ? cancelRef : confirmRef).current?.focus();
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onCancelRef.current();
+      if (e.key === "Escape") {
+        onCancelRef.current();
+        return;
+      }
+      if (e.key !== "Tab" || !panelRef.current) return;
+      const nodes = focusableIn(panelRef.current);
+      if (nodes.length === 0) return;
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     window.addEventListener("keydown", onKey);
     return () => {
@@ -58,16 +84,20 @@ export function ConfirmDialog({
       onClick={onCancel}
     >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={bodyId}
         className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id={titleId} className="text-lg font-semibold text-white">
           {title}
         </h2>
-        <p className="mt-2 text-sm text-slate-400">{body}</p>
+        <p id={bodyId} className="mt-2 text-sm text-slate-400">
+          {body}
+        </p>
         <div className="mt-5 flex justify-end gap-2">
           <button
             ref={cancelRef}

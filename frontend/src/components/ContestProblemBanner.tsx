@@ -4,7 +4,8 @@ import Link from "next/link";
 
 import { useClarifications } from "@/components/ContestClarifications";
 import { Countdown } from "@/components/Countdown";
-import type { ContestDetail } from "@/lib/types";
+import { problemHref } from "@/lib/contest-context";
+import type { ActiveContestRef, ContestDetail } from "@/lib/types";
 
 type Props = {
   contest: ContestDetail;
@@ -74,6 +75,43 @@ export function ContestProblemBanner({ contest, slug, onPhaseChange }: Props) {
           onPhaseChange={onPhaseChange}
         />
       )}
+    </div>
+  );
+}
+
+/** Shown when a student opens an active contest problem without `?contest=<id>`. */
+export function MissingContestBanner({
+  slug,
+  activeContests,
+}: {
+  slug: string;
+  activeContests: ActiveContestRef[];
+}) {
+  if (activeContests.length === 0) return null;
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-700/70 bg-amber-950/40 p-3 text-sm text-amber-100"
+    >
+      <div className="space-y-1">
+        <p className="font-medium text-amber-50">
+          This problem belongs to a live contest you&apos;re registered in.
+        </p>
+        <p className="text-xs text-amber-200/90">
+          Practice submissions are disabled while the contest is running — switch to contest mode so your submission counts on the scoreboard.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {activeContests.map((c) => (
+          <Link
+            key={c.id}
+            href={problemHref(slug, c.id)}
+            className="rounded-sm bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-500"
+          >
+            Open in {c.title} ({c.letter})
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }

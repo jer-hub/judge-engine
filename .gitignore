@@ -49,3 +49,10 @@ backups/
 
 # Generated handouts (the array-techniques PDF includes the answer key).
 handouts/
+
+# Playwright E2E artifacts
+frontend/playwright-report/
+frontend/test-results/
+frontend/playwright-results.*
+.playwright-report/
+.playwright-results/

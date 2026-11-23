@@ -31,12 +31,15 @@ FOCUS_EVENT_TYPES = frozenset(
     }
 )
 # Immediate soft-block (do not wait for threshold).
+# Only intentional fullscreen exit blocks immediately; tab hides/blurs count
+# toward FOCUS_SOFT_BLOCK_THRESHOLD so OS overlays or brief alt-tabs warn first.
 IMMEDIATE_BLOCK_TYPES = frozenset(
     {
         ContestIntegrityEvent.EventType.FULLSCREEN_EXIT,
-        ContestIntegrityEvent.EventType.VISIBILITY_HIDDEN,
     }
 )
+
+MAX_BULK_UNLOCK_USERS = 200
 
 
 def assert_can_post_events(contest: Contest, user) -> ContestParticipant:
@@ -198,6 +201,82 @@ def unlock_soft_block(contest: Contest, teacher, username: str) -> dict[str, Any
     }
 
 
+def unlock_soft_block_many(
+    contest: Contest,
+    teacher,
+    *,
+    usernames: list | None = None,
+    unlock_all: bool = False,
+) -> dict[str, Any]:
+    """Teacher clears soft-blocks for all blocked students or an explicit list."""
+    if not contest.integrity_monitoring or not contest.integrity_strict:
+        raise ValidationError(
+            {"detail": "Soft-block unlock is only used when strict monitoring is on."}
+        )
+    if not isinstance(unlock_all, bool):
+        raise ValidationError({"unlock_all": "Must be true or false."})
+
+    clean_names: list[str] = []
+    if not unlock_all:
+        if not isinstance(usernames, list) or not usernames:
+            raise ValidationError(
+                {"usernames": "Provide a non-empty list of usernames or unlock_all=true."}
+            )
+        if len(usernames) > MAX_BULK_UNLOCK_USERS:
+            raise ValidationError(
+                {"usernames": f"At most {MAX_BULK_UNLOCK_USERS} usernames per request."}
+            )
+        for raw in usernames:
+            if not isinstance(raw, str) or not raw.strip():
+                raise ValidationError({"usernames": "Each username must be a non-empty string."})
+            clean_names.append(raw.strip().lower())
+
+    with transaction.atomic():
+        qs = ContestParticipant.objects.select_for_update().select_related("user").filter(
+            contest=contest
+        )
+        if unlock_all:
+            participants = list(qs.filter(integrity_blocked=True).order_by("user__username"))
+            already_unblocked_count = 0
+        else:
+            from django.db.models.functions import Lower
+
+            participants = list(
+                qs.annotate(uname_lower=Lower("user__username"))
+                .filter(uname_lower__in=set(clean_names))
+                .order_by("user__username")
+            )
+            already_unblocked_count = sum(1 for p in participants if not p.integrity_blocked)
+            participants = [p for p in participants if p.integrity_blocked]
+
+        unlocked_names = [p.user.username for p in participants]
+        if participants:
+            ContestParticipant.objects.filter(pk__in=[p.pk for p in participants]).update(
+                integrity_blocked=False,
+                integrity_focus_since_ack=0,
+                integrity_paste_since_ack=0,
+                integrity_ack_count=F("integrity_ack_count") + 1,
+            )
+            ContestIntegrityEvent.objects.bulk_create(
+                [
+                    ContestIntegrityEvent(
+                        contest=contest,
+                        user=p.user,
+                        event_type=ContestIntegrityEvent.EventType.SOFT_BLOCK_ACK,
+                        count=1,
+                        meta={"unlocked_by": teacher.username},
+                    )
+                    for p in participants
+                ]
+            )
+
+    return {
+        "unlocked": unlocked_names,
+        "unlocked_count": len(unlocked_names),
+        "already_unblocked_count": already_unblocked_count,
+    }
+
+
 def assert_can_submit(contest: Contest | None, user) -> None:
     """Raise if strict soft-block is active for this contest submit."""
     if contest is None or not contest.integrity_monitoring or not contest.integrity_strict:
@@ -217,7 +296,7 @@ def integrity_summary(contest: Contest) -> dict[str, Any]:
     participants = list(
         ContestParticipant.objects.filter(contest=contest)
         .select_related("user")
-        .order_by("user__username")
+        .order_by("-integrity_blocked", "user__username")
     )
     user_ids = [p.user_id for p in participants]
 

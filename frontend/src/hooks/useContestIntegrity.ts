@@ -3,18 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiFetch } from "@/lib/api";
-
-type IntegrityEventType =
-  | "visibility_hidden"
-  | "visibility_visible"
-  | "window_blur"
-  | "window_focus"
-  | "editor_paste"
-  | "fullscreen_exit"
-  | "fullscreen_enter";
+import {
+  type IntegrityClientEventType,
+  VISIBILITY_GRACE_MS,
+  formatFocusWarning,
+  shouldClientImmediateBlock,
+} from "@/lib/integrity";
 
 type QueuedEvent = {
-  type: IntegrityEventType;
+  type: IntegrityClientEventType;
   count: number;
   meta?: { chars?: number };
 };
@@ -22,6 +19,8 @@ type QueuedEvent = {
 type EventsResponse = {
   created: number;
   integrity_blocked?: boolean;
+  integrity_focus_since_ack?: number;
+  integrity_paste_since_ack?: number;
 };
 
 const FLUSH_MS = 20_000;
@@ -42,6 +41,8 @@ export function useContestIntegrity(
 ): {
   notice: string | null;
   dismissNotice: () => void;
+  focusWarning: string | null;
+  dismissFocusWarning: () => void;
   recordPaste: (chars: number) => void;
   blocked: boolean;
   setBlocked: (v: boolean) => void;
@@ -57,14 +58,20 @@ export function useContestIntegrity(
   strictRef.current = strict;
 
   const [notice, setNotice] = useState<string | null>(null);
-  const [blocked, setBlocked] = useState(initiallyBlocked);
+  const [focusWarning, setFocusWarning] = useState<string | null>(null);
+  const [blocked, setBlockedState] = useState(initiallyBlocked);
   const [fullscreenOk, setFullscreenOk] = useState(() => !strict || isFullscreen());
+
+  const setBlocked = useCallback((v: boolean) => {
+    setBlockedState(v);
+    if (!v) setFocusWarning(null);
+  }, []);
 
   useEffect(() => {
     setBlocked(initiallyBlocked);
-  }, [initiallyBlocked, contestId]);
+  }, [initiallyBlocked, contestId, setBlocked]);
 
-  const enqueue = useCallback((type: IntegrityEventType, meta?: { chars?: number }) => {
+  const enqueue = useCallback((type: IntegrityClientEventType, meta?: { chars?: number }) => {
     if (!enabledRef.current || !contestIdRef.current) return;
     const key =
       type === "editor_paste" || type === "fullscreen_exit" || type === "fullscreen_enter"
@@ -90,7 +97,12 @@ export function useContestIntegrity(
           method: "POST",
           body: JSON.stringify({ events: chunk }),
         });
-        if (res.integrity_blocked) setBlocked(true);
+        if (res.integrity_blocked) {
+          setBlockedState(true);
+          setFocusWarning(null);
+        } else if (typeof res.integrity_focus_since_ack === "number") {
+          setFocusWarning(formatFocusWarning(res.integrity_focus_since_ack, strictRef.current));
+        }
       } catch {
         // Silent: integrity telemetry must not break the editor.
       }
@@ -113,26 +125,40 @@ export function useContestIntegrity(
   useEffect(() => {
     if (!enabled || !contestId) {
       setNotice(null);
+      setFocusWarning(null);
       return;
     }
 
     if (typeof sessionStorage !== "undefined" && !sessionStorage.getItem(BANNER_KEY(contestId))) {
       setNotice(
         strict
-          ? "Strict integrity: stay in fullscreen. Leaving or heavy pasting soft-blocks Submit until a teacher unlocks you."
+          ? "Strict integrity: stay in fullscreen. Exiting fullscreen, repeated tab switches, or heavy pasting soft-blocks Submit until a teacher unlocks you."
           : "This contest logs tab focus and paste signals for teachers (review only — not auto-penalties).",
       );
     }
 
+    let hideGraceTimer: number | null = null;
+    const clearHideGrace = () => {
+      if (hideGraceTimer !== null) {
+        window.clearTimeout(hideGraceTimer);
+        hideGraceTimer = null;
+      }
+    };
+
     const onVisibility = () => {
       if (document.visibilityState === "hidden") {
-        enqueue("visibility_hidden");
-        // Immediate server flush so Submit cannot race the 20s batch window.
         if (strictRef.current) {
-          setBlocked(true);
-          void flush();
+          clearHideGrace();
+          hideGraceTimer = window.setTimeout(() => {
+            hideGraceTimer = null;
+            enqueue("visibility_hidden");
+            void flush();
+          }, VISIBILITY_GRACE_MS);
+        } else {
+          enqueue("visibility_hidden");
         }
       } else {
+        clearHideGrace();
         enqueue("visibility_visible");
       }
     };
@@ -147,8 +173,9 @@ export function useContestIntegrity(
       } else {
         setFullscreenOk(false);
         enqueue("fullscreen_exit");
-        if (strictRef.current) {
-          setBlocked(true);
+        if (shouldClientImmediateBlock(strictRef.current, "fullscreen_exit")) {
+          setBlockedState(true);
+          setFocusWarning(null);
           void flush();
         }
       }
@@ -162,6 +189,7 @@ export function useContestIntegrity(
     const timer = window.setInterval(() => void flush(), FLUSH_MS);
 
     return () => {
+      clearHideGrace();
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
@@ -178,10 +206,17 @@ export function useContestIntegrity(
     setNotice(null);
   }, [contestId]);
 
+  const dismissFocusWarning = useCallback(() => {
+    setFocusWarning(null);
+  }, []);
+
   const recordPaste = useCallback(
     (chars: number) => {
-      enqueue("editor_paste", { chars: Math.max(0, Math.floor(chars)) });
-      void flush();
+      if (!enabledRef.current || !contestIdRef.current) return;
+      enqueue("editor_paste", { chars: Math.max(0, Math.round(chars)) });
+      if (strictRef.current) {
+        void flush();
+      }
     },
     [enqueue, flush],
   );
@@ -189,6 +224,8 @@ export function useContestIntegrity(
   return {
     notice,
     dismissNotice,
+    focusWarning,
+    dismissFocusWarning,
     recordPaste,
     blocked,
     setBlocked,

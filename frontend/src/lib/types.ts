@@ -35,10 +35,17 @@ export type SampleTest = {
   points: number;
 };
 
+export type ActiveContestRef = {
+  id: number;
+  title: string;
+  letter: string;
+};
+
 export type ProblemDetail = ProblemListItem & {
   statement: string;
   run_all_tests: boolean;
   sample_tests: SampleTest[];
+  active_contests?: ActiveContestRef[];
 };
 
 export type Submission = {
@@ -232,4 +239,41 @@ export type RunPreview = {
   stdout: string;
   stderr: string;
   execution_time_ms: number | null;
+};
+
+export type IntegrityRecentEvent = {
+  type: string;
+  count: number;
+  meta: Record<string, unknown>;
+  created_at: string;
+};
+
+export type IntegrityStudentRow = {
+  user_id: number;
+  username: string;
+  visibility_hidden: number;
+  window_blur: number;
+  editor_paste: number;
+  fullscreen_exit?: number;
+  submit_ips: string[];
+  shared_ip_with: string[];
+  blocked?: boolean;
+  ack_count?: number;
+  focus_since_ack?: number;
+  paste_since_ack?: number;
+  recent_events: IntegrityRecentEvent[];
+};
+
+export type IntegritySummary = {
+  contest_id: number;
+  integrity_monitoring: boolean;
+  integrity_strict?: boolean;
+  students: IntegrityStudentRow[];
+  event_counts: number;
+};
+
+export type BulkUnlockResult = {
+  unlocked: string[];
+  unlocked_count: number;
+  already_unblocked_count: number;
 };

@@ -18,11 +18,16 @@ services:
     cpus: ${REDIS_CPUS:-0.5}
     ports: !reset []
     restart: unless-stopped
-    # Persist the queue: without it, recreating Redis drops queued judging
-    # (the recovery sweep would re-queue it, but only after the stale window).
-    command: redis-server --appendonly yes
+    # Persist the queue + require auth: without persistence, recreating Redis
+    # drops queued judging until the stale recovery window.
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
     volumes:
       - redis_data:/data
+
+  docker-proxy:
+    mem_limit: ${DOCKER_PROXY_MEM_LIMIT:-128m}
+    cpus: ${DOCKER_PROXY_CPUS:-0.25}
+    restart: unless-stopped
 
   backend:
     mem_limit: ${BACKEND_MEM_LIMIT:-1g}
@@ -57,7 +62,6 @@ services:
       DJANGO_DEBUG: "False"
     volumes: !override
       - ./judge_data:/judge_data
-      - /var/run/docker.sock:/var/run/docker.sock
 
   worker-preview:
     mem_limit: ${PREVIEW_WORKER_MEM_LIMIT:-384m}
@@ -68,7 +72,6 @@ services:
       DJANGO_DEBUG: "False"
     volumes: !override
       - ./judge_data:/judge_data
-      - /var/run/docker.sock:/var/run/docker.sock
 
   frontend:
     mem_limit: ${FRONTEND_MEM_LIMIT:-512m}

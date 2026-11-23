@@ -23,6 +23,7 @@ export function NavBar() {
   const { data: user } = useQuery({
     queryKey: ["me"],
     queryFn: () => apiFetch<User>("/auth/me/"),
+    enabled: pathname !== "/login",
     retry: false,
   });
 

@@ -318,3 +318,74 @@ class ContestIntegrityApiTests(APITestCase):
             ).count(),
             0,
         )
+
+    def test_strict_single_visibility_hidden_warns_without_immediate_block(self):
+        """A single accidental tab hide increments focus counter without instant lock."""
+        self.contest.integrity_strict = True
+        self.contest.save(update_fields=["integrity_strict"])
+        self._auth(self.alice)
+
+        first = self.client.post(
+            self._events_url(),
+            {"events": [{"type": "visibility_hidden", "count": 1}]},
+            format="json",
+        )
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(first.data["integrity_blocked"])
+        self.assertEqual(first.data["integrity_focus_since_ack"], 1)
+
+        threshold = self.client.post(
+            self._events_url(),
+            {"events": [{"type": "visibility_hidden", "count": 4}]},
+            format="json",
+        )
+        self.assertEqual(threshold.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(threshold.data["integrity_blocked"])
+        self.assertEqual(threshold.data["integrity_focus_since_ack"], 5)
+
+    def test_bulk_unlock_all_and_usernames_list(self):
+        """Teachers can bulk-unlock all blocked students or a specific username list."""
+        self.contest.integrity_strict = True
+        self.contest.save(update_fields=["integrity_strict"])
+        carol = User.objects.create_user(
+            username="carol", password="pass12345", role=User.Role.STUDENT
+        )
+        ContestParticipant.objects.create(
+            contest=self.contest,
+            user=carol,
+            integrity_blocked=False,
+            integrity_focus_since_ack=2,
+        )
+        ContestParticipant.objects.filter(
+            contest=self.contest, user__in=[self.alice, self.bob]
+        ).update(integrity_blocked=True, integrity_focus_since_ack=5)
+
+        self._auth(self.admin)
+        # Blocked students appear before unblocked students in summary
+        summary = self.client.get(self._summary_url())
+        self.assertEqual(summary.status_code, status.HTTP_200_OK)
+        names = [s["username"] for s in summary.data["students"]]
+        self.assertEqual(names[:2], ["alice", "bob"])
+
+        resp = self.client.post(
+            self._unlock_url(), {"unlock_all": True}, format="json"
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp.data["unlocked_count"], 2)
+        self.assertCountEqual(resp.data["unlocked"], ["alice", "bob"])
+
+        # Unblocked carol's counters were not wiped
+        carol_p = ContestParticipant.objects.get(contest=self.contest, user=carol)
+        self.assertEqual(carol_p.integrity_focus_since_ack, 2)
+
+        # Also test explicit usernames list
+        ContestParticipant.objects.filter(
+            contest=self.contest, user=self.bob
+        ).update(integrity_blocked=True, integrity_paste_since_ack=3)
+        resp2 = self.client.post(
+            self._unlock_url(), {"usernames": ["alice", "bob"]}, format="json"
+        )
+        self.assertEqual(resp2.status_code, status.HTTP_200_OK)
+        self.assertEqual(resp2.data["unlocked_count"], 1)
+        self.assertEqual(resp2.data["already_unblocked_count"], 1)
+        self.assertEqual(resp2.data["unlocked"], ["bob"])

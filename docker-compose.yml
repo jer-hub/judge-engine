@@ -35,14 +35,40 @@ services:
   redis:
     image: redis:7-alpine
     logging: *default-logging
-    # Loopback only - Redis has no auth and is the Celery broker.
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-judge_dev_redis_password}
+    # Loopback only + password auth: Redis is the Celery broker.
     ports:
       - "127.0.0.1:6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Narrow Docker API proxy so workers never mount /var/run/docker.sock directly
+  # (blocks /exec, /volumes, /networks, /swarm, /secrets, /system, /build, etc.).
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    logging: *default-logging
+    environment:
+      CONTAINERS: "1"
+      IMAGES: "1"
+      POST: "1"
+      PING: "1"
+      VERSION: "1"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - docker_proxy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:2375/_ping | grep -q OK"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build:
@@ -51,15 +77,15 @@ services:
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py collectstatic --noinput &&
-             python manage.py bootstrap_admin --username $${BOOTSTRAP_ADMIN_USER:-admin} --password $${BOOTSTRAP_ADMIN_PASSWORD:-JudgeDev-Admin-ChangeMe!} || true &&
+             BOOTSTRAP_ADMIN_PASSWORD=\"$${BOOTSTRAP_ADMIN_PASSWORD:-JudgeDev-Admin-ChangeMe!}\" python manage.py bootstrap_admin --username $${BOOTSTRAP_ADMIN_USER:-admin} || true &&
              gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --reload"
     env_file:
       - .env
     environment:
       POSTGRES_HOST: db
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      REDIS_URL: redis://:${REDIS_PASSWORD:-judge_dev_redis_password}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-judge_dev_redis_password}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-judge_dev_redis_password}@redis:6379/1
       # Bootstrap credentials come from .env (see .env.example). Do not hardcode here.
     volumes:
       - ./backend:/app
@@ -85,8 +111,17 @@ services:
     build:
       context: ./backend
     logging: *default-logging
-    # Root: needs the Docker socket (root-equivalent regardless of the user).
+    # Minimal file capabilities for isolating /judge_data/<job> as uid 65534 (0700);
+    # Docker access goes through docker-proxy on an isolated internal network.
     user: "0"
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    security_opt:
+      - no-new-privileges:true
     # -B: embedded beat runs the stuck-submission recovery sweep every minute.
     # Only one judge worker may run it, so do not scale this service.
     command: celery -A config worker -B --schedule /tmp/celerybeat-schedule -Q judge,celery --loglevel=info --concurrency=2 -n judge@%h
@@ -94,9 +129,10 @@ services:
       - .env
     environment:
       POSTGRES_HOST: db
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      REDIS_URL: redis://:${REDIS_PASSWORD:-judge_dev_redis_password}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-judge_dev_redis_password}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-judge_dev_redis_password}@redis:6379/1
+      DOCKER_HOST: tcp://docker-proxy:2375
       JUDGE_DATA_DIR: /judge_data
       # Empty: the worker asks Docker which host folder backs /judge_data.
       JUDGE_HOST_DATA_DIR: ${JUDGE_HOST_DATA_DIR:-}
@@ -104,12 +140,16 @@ services:
     volumes:
       - ./backend:/app
       - ./judge_data:/judge_data
-      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - default
+      - docker_proxy
     healthcheck: *worker-healthcheck
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      docker-proxy:
         condition: service_healthy
       backend:
         condition: service_started
@@ -120,14 +160,23 @@ services:
       context: ./backend
     logging: *default-logging
     user: "0"
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    security_opt:
+      - no-new-privileges:true
     command: celery -A config worker -Q preview --loglevel=info --concurrency=1 -n preview@%h
     env_file:
       - .env
     environment:
       POSTGRES_HOST: db
-      REDIS_URL: redis://redis:6379/0
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      REDIS_URL: redis://:${REDIS_PASSWORD:-judge_dev_redis_password}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:-judge_dev_redis_password}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD:-judge_dev_redis_password}@redis:6379/1
+      DOCKER_HOST: tcp://docker-proxy:2375
       JUDGE_DATA_DIR: /judge_data
       # Empty: the worker asks Docker which host folder backs /judge_data.
       JUDGE_HOST_DATA_DIR: ${JUDGE_HOST_DATA_DIR:-}
@@ -135,12 +184,16 @@ services:
     volumes:
       - ./backend:/app
       - ./judge_data:/judge_data
-      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - default
+      - docker_proxy
     healthcheck: *worker-healthcheck
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      docker-proxy:
         condition: service_healthy
       # Migrations run in the backend's startup command.
       backend:
@@ -188,6 +241,10 @@ services:
       retries: 3
     depends_on:
       - backend
+
+networks:
+  docker_proxy:
+    internal: true
 
 volumes:
   postgres_data:

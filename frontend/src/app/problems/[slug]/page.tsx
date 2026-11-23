@@ -5,12 +5,13 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { CodeEditor, JAVA_STUB } from "@/components/CodeEditor";
-import { ContestProblemBanner } from "@/components/ContestProblemBanner";
+import { ContestProblemBanner, MissingContestBanner } from "@/components/ContestProblemBanner";
 import { MySubmissions, mySubmissionsKey } from "@/components/MySubmissions";
 import { StatementContent } from "@/components/StatementContent";
 import { SubmissionStatus, VerdictBadge } from "@/components/SubmissionStatus";
 import { useContestIntegrity } from "@/hooks/useContestIntegrity";
 import { ApiError, apiFetch } from "@/lib/api";
+import { missingContestTargets } from "@/lib/contest-context";
 import { draftKey, loadDraft, saveDraft } from "@/lib/drafts";
 import type { ContestDetail, ProblemDetail, RunPreview, Submission, User } from "@/lib/types";
 
@@ -65,6 +66,8 @@ function ProblemDetailInner() {
   const {
     notice: integrityNotice,
     dismissNotice,
+    focusWarning,
+    dismissFocusWarning,
     recordPaste,
     blocked: integrityBlocked,
     setBlocked: setIntegrityBlocked,
@@ -218,6 +221,8 @@ function ProblemDetailInner() {
     submit.mutate();
   }
 
+  const missingContests = missingContestTargets(contestId, problem.active_contests);
+
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <section className="space-y-4">
@@ -227,6 +232,9 @@ function ProblemDetailInner() {
             slug={slug}
             onPhaseChange={() => void contestQuery.refetch()}
           />
+        )}
+        {missingContests.length > 0 && (
+          <MissingContestBanner slug={slug} activeContests={missingContests} />
         )}
         <div>
           <h1 className="text-3xl font-semibold text-white">{problem.title}</h1>
@@ -301,10 +309,35 @@ function ProblemDetailInner() {
         {integrityStrict && integrityBlocked && (
           <div
             role="alert"
-            className="rounded-sm border border-amber-800/70 bg-amber-950/50 px-3 py-2 text-sm text-amber-100"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-amber-800/70 bg-amber-950/50 px-3 py-2 text-sm text-amber-100"
           >
-            Soft-block active: ask a teacher to unlock your submissions for this contest.
-            This page checks every few seconds after they unlock you.
+            <span>
+              Soft-block active: ask a teacher to unlock your submissions for this contest.
+              This page checks automatically every few seconds.
+            </span>
+            <button
+              type="button"
+              disabled={contestQuery.isFetching}
+              onClick={() => void contestQuery.refetch()}
+              className="shrink-0 cursor-pointer rounded-sm border border-amber-700 px-2.5 py-1 text-xs font-medium text-amber-100 hover:bg-amber-900/50 disabled:opacity-50"
+            >
+              {contestQuery.isFetching ? "Checking…" : "Check now"}
+            </button>
+          </div>
+        )}
+        {integrityStrict && !integrityBlocked && focusWarning && (
+          <div
+            role="status"
+            className="flex items-start justify-between gap-3 rounded-sm border border-amber-800/60 bg-amber-950/40 px-3 py-2 text-xs text-amber-100"
+          >
+            <p>{focusWarning}</p>
+            <button
+              type="button"
+              onClick={dismissFocusWarning}
+              className="shrink-0 cursor-pointer text-amber-200/80 hover:text-white"
+            >
+              Dismiss
+            </button>
           </div>
         )}
         {integrityNotice && (

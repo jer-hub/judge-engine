@@ -280,8 +280,17 @@ class ContestViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="integrity-unlock")
     def integrity_unlock(self, request, pk=None):
-        """Admin: clear a student's soft-block ({"username"})."""
+        """Admin: clear soft-blocks ({"username"} or {"usernames": [...]} or {"unlock_all": true})."""
         contest = self.get_object()
+        if "unlock_all" in request.data or "usernames" in request.data:
+            return Response(
+                integ.unlock_soft_block_many(
+                    contest,
+                    request.user,
+                    usernames=request.data.get("usernames"),
+                    unlock_all=request.data.get("unlock_all", False),
+                )
+            )
         return Response(
             integ.unlock_soft_block(
                 contest, request.user, request.data.get("username", "")

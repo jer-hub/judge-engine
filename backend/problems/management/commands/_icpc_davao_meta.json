@@ -1,0 +1,218 @@
+[
+  {
+    "letter": "A",
+    "title": "Durian Stall Ledger",
+    "id_line": "ID: A | Tier: Beginner | Core topics: basic I/O, loops, 1D arrays, int vs long overflow, exact integer comparison",
+    "time_line": "Time limit: 1.0 s | Memory limit: 512 MB",
+    "statement": "Every evening during durian season, the vendors along the fruit lane near Magsaysay Park in Davao City hand their tally sheets to the city market office. Each stall reports how many kilos of durian it sold and its price per kilo. The market clerk, Inday Lorna, needs three numbers for each market day: the total revenue of the lane, the stall that earned the most, and how many stalls earned strictly more than the average stall. Her old spreadsheet kept printing negative totals on big days, so she asks you for a program that never overflows.\nFormally, a market day has N stalls numbered 1 to N. Stall i sold k_i kilos at p_i pesos per kilo, so its revenue is r_i = k_i \u00d7 p_i.\nThe total revenue is S = r_1 + r_2 + ... + r_N.\nThe best stall is the index i with the largest r_i. If several stalls tie, choose the smallest index.\nA stall is above average if r_i > S / N, where S / N is the exact (real number) average.",
+    "input_format": "The first line contains an integer T, the number of market days. Each market day is given as follows:\na line with an integer N;\nN lines, the i-th containing two integers k_i and p_i.",
+    "output_format": "For each market day print one line with three integers separated by single spaces: S, the index of the best stall, and the number of above-average stalls.",
+    "constraints": "1 \u2264 T \u2264 100\n1 \u2264 N \u2264 10^5, and the sum of N over all market days is at most 2 \u00d7 10^5\n1 \u2264 k_i \u2264 10^9\n1 \u2264 p_i \u2264 10^4",
+    "samples": [
+      {
+        "input": "2\n3\n10 50\n4 125\n7 80\n1\n1000000000 10000\n",
+        "output": "1560 3 1\n10000000000000 1 0\n"
+      },
+      {
+        "input": "1\n4\n5 20\n10 10\n2 50\n1 1\n",
+        "output": "301 1 3\n"
+      }
+    ]
+  },
+  {
+    "letter": "B",
+    "title": "Jeepney Signboard Codes",
+    "id_line": "ID: B | Tier: Beginner | Core topics: string manipulation, run-length encoding, parsing multi-digit numbers, StringBuilder",
+    "time_line": "Time limit: 1.0 s | Memory limit: 512 MB",
+    "statement": "The painters at the Bankerohan jeepney terminal letter route codes onto narrow signboards. Long codes such as AAABCCDDDDDDDDDDDD waste paint, so the terminal adopted a compact notation: every block of repeated letters is written once, followed by how many times it repeats. Dispatchers must also be able to turn a painted code back into the full route code. Write a tool that does both.\nFormally, split a string S of uppercase letters into maximal runs of equal consecutive letters. A run consisting of the letter c repeated L times is written as:\nc alone, if L = 1;\nc followed by the decimal representation of L (no leading zeros), if L \u2265 2.\nThe encoding of S is the concatenation of the written runs, in order. Decoding is the inverse operation.",
+    "input_format": "The first line contains an integer T. Each of the next T lines contains a character op and a string X, separated by one space:\nif op is E, print the encoding of X;\nif op is D, print the string whose encoding is X.",
+    "output_format": "For each of the T lines, print the resulting string on its own line.",
+    "constraints": "1 \u2264 T \u2264 1000\nIf op = E: X consists of uppercase letters A to Z, and 1 \u2264 |X| \u2264 10^5.\nIf op = D: X is exactly the encoding of some uppercase string of length between 1 and 10^5. (So adjacent runs in X use different letters, and every written count is at least 2 with no leading zeros.)\nThe total length of all strings X plus all output strings is at most 10^6.",
+    "samples": [
+      {
+        "input": "3\nE AAABCCDDDDDDDDDDDD\nD A3BC2D12\nE XYZ\n",
+        "output": "A3BC2D12\nAAABCCDDDDDDDDDDDD\nXYZ\n"
+      },
+      {
+        "input": "2\nE Q\nD Z10\n",
+        "output": "Q\nZZZZZZZZZZ\n"
+      }
+    ]
+  },
+  {
+    "letter": "C",
+    "title": "Cooperative Ledger Periods",
+    "id_line": "ID: C | Tier: Easy to Intermediate | Core topics: prefix sums, HashMap frequency counting, long counters",
+    "time_line": "Time limit: 1.0 s | Memory limit: 512 MB",
+    "statement": "The Toril Farmers' Multi-Purpose Cooperative records the net cash change of its store every day: a positive number is a gain and a negative number is a loss. The board wants to audit on-target periods: blocks of consecutive days whose total net change is exactly the target amount K set at the start of the year. They want to know how many on-target periods exist and how long the longest one is.\nFormally, you are given integers a_1, a_2, ..., a_N and K. A pair (l, r) with 1 \u2264 l \u2264 r \u2264 N is an on-target period if a_l + a_(l+1) + ... + a_r = K. Its length is r - l + 1.",
+    "input_format": "The first line contains N and K. The second line contains N integers a_1, ..., a_N.",
+    "output_format": "Print two integers separated by a space: the number of on-target periods, and the maximum length of an on-target period (print 0 as the length if there is none).",
+    "constraints": "1 \u2264 N \u2264 2 \u00d7 10^5\n-10^9 \u2264 a_i \u2264 10^9\n-10^15 \u2264 K \u2264 10^15",
+    "samples": [
+      {
+        "input": "6 3\n1 2 -1 4 -1 3\n",
+        "output": "4 2\n"
+      },
+      {
+        "input": "5 0\n0 0 0 0 0\n",
+        "output": "15 5\n"
+      },
+      {
+        "input": "3 3000000000\n1000000000 1000000000 1000000000\n",
+        "output": "1 3\n"
+      }
+    ]
+  },
+  {
+    "letter": "D",
+    "title": "Kadayawan Cup Scoreboard",
+    "id_line": "ID: D | Tier: Easy to Intermediate | Core topics: simulation, HashMap<String,Integer>, custom Comparator, tie-aware ranking",
+    "time_line": "Time limit: 2.0 s | Memory limit: 512 MB",
+    "statement": "To celebrate the Kadayawan Festival, Davao's universities hold the Kadayawan Cup, an ICPC-style contest. The judges' server crashed just before the awarding, and only the raw submission log survived. You must rebuild the final scoreboard.\nThere are N teams with distinct names and P problems labeled with the first P uppercase letters. Each log entry has a time in minutes, a team, a problem and a verdict, one of AC, WA, TLE, RTE, CE. The log is in chronological order, and entries with equal time happen in input order.\nScoring rules. For each team and each problem, look at that team's submissions on that problem in log order:\nIf none of them is AC, the problem is unsolved and contributes nothing (rejected attempts on unsolved problems cost nothing).\nOtherwise the problem is solved. Let t be the time of the first AC and w the number of WA, TLE or RTE submissions before that first AC. The problem contributes t + 20 \u00d7 w penalty minutes. CE submissions are never counted. Every submission after the first AC is ignored.\nA team's score is its number of solved problems and its penalty, the sum of the contributions of its solved problems.\nRanking rules. Teams are listed by more solved problems first, then smaller penalty, then team name in increasing lexicographic (ASCII) order. The rank of a team is 1 + the number of teams that solved more problems, or solved the same number with a strictly smaller penalty. (Teams with equal solved and penalty share a rank, and the next rank is skipped, as in 1, 2, 2, 4.)",
+    "input_format": "The first line contains N, P and M.\nThe next N lines each contain one team name.\nThe next M lines each contain t team problem verdict.",
+    "output_format": "Print N lines, in ranking order: rank name solved penalty.",
+    "constraints": "1 \u2264 N \u2264 10^4, 1 \u2264 P \u2264 26, 0 \u2264 M \u2264 2 \u00d7 10^5\nTeam names have 1 to 20 characters, each a lowercase letter or a digit, and are distinct.\n0 \u2264 t \u2264 300, times are non-decreasing; every team in the log is one of the N teams; every problem letter is among the first P letters.",
+    "samples": [
+      {
+        "input": "3 3 9\nateneo\nusep\njmc\n5 jmc A WA\n12 jmc A AC\n15 usep A AC\n20 ateneo B CE\n31 ateneo B AC\n40 usep B WA\n44 jmc B AC\n50 usep B AC\n60 jmc A WA\n",
+        "output": "1 jmc 2 76\n2 usep 2 85\n3 ateneo 1 31\n"
+      },
+      {
+        "input": "4 2 4\ndelta\nalpha\ncharlie\nbravo\n10 delta A AC\n10 bravo A AC\n100 charlie B TLE\n200 charlie B RTE\n",
+        "output": "1 bravo 1 10\n1 delta 1 10\n3 alpha 0 0\n3 charlie 0 0\n"
+      }
+    ]
+  },
+  {
+    "letter": "E",
+    "title": "The Samal Ferry",
+    "id_line": "ID: E | Tier: Easy to Intermediate | Core topics: binary search on the answer, greedy feasibility check, long ranges",
+    "time_line": "Time limit: 1.0 s | Memory limit: 512 MB",
+    "statement": "A small passenger ferry runs from the Sasa wharf in Davao City to the Island Garden City of Samal. Passengers wait in a single queue, each with their luggage, and board strictly in queue order. On every trip the ferry takes some passengers from the front of the queue. The cooperative that runs the ferry is buying a new boat and must choose its weight capacity: big boats cost more, so they want the smallest capacity that still gets everyone across today.\nFormally, there are N passengers with weights w_1, ..., w_N (luggage included), in queue order. A boat of capacity C (a positive integer) makes trips; each trip carries a group of consecutive passengers from the front of the remaining queue such that:\nthe total weight of the group is at most C, and\nthe group has at most P passengers (the number of seats).\nThe boat may make at most K trips today. Find the minimum integer C for which all N passengers can be carried, or report that no capacity works.",
+    "input_format": "The first line contains T. Each test case consists of a line with N, K, P, followed by a line with w_1, ..., w_N.",
+    "output_format": "For each test case print the minimum capacity C, or -1 if it is impossible for every capacity.",
+    "constraints": "1 \u2264 T \u2264 10\n1 \u2264 N \u2264 2 \u00d7 10^5, and the sum of N over all test cases is at most 2 \u00d7 10^5\n1 \u2264 K \u2264 N, 1 \u2264 P \u2264 N\n1 \u2264 w_i \u2264 10^9",
+    "samples": [
+      {
+        "input": "2\n5 3 2\n4 8 2 6 5\n4 2 1\n1 1 1 1\n",
+        "output": "11\n-1\n"
+      },
+      {
+        "input": "1\n6 2 3\n1000000000 1000000000 1000000000 1000000000 1000000000 1000000000\n",
+        "output": "3000000000\n"
+      }
+    ]
+  },
+  {
+    "letter": "F",
+    "title": "Flash Flood in Matina",
+    "id_line": "ID: F | Tier: Intermediate | Core topics: multi-source BFS, BFS on grids with time constraints, flattened arrays",
+    "time_line": "Time limit: 2.0 s | Memory limit: 512 MB",
+    "statement": "Heavy rain from the Talomo River floods parts of Barangay Matina. Rescue volunteer Juan is inside a flooded neighborhood and must reach an evacuation point on high ground before the water reaches him. The neighborhood map is a grid of R rows and C columns, where each cell is one of:\n. open ground,\n# a wall (nobody and no water can enter),\nS Juan's starting cell (exactly one; otherwise open ground),\nE an evacuation point (high ground: water never enters it),\nW a cell that is already flooded at minute 0.\nTime advances in whole minutes. Two cells are adjacent if they share a side.\nWater. At minute 0 exactly the W cells are flooded. If a cell is flooded at minute m, then at minute m + 1 every adjacent cell that is not # and not E is flooded too. Flooded cells stay flooded.\nJuan. Juan is on S at minute 0. Each minute he either stays where he is or moves to an adjacent cell that is not #. Let cell(m) be his cell at minute m. He survives only if cell(m) is not flooded at minute m, for every minute m of his trip. (So he may leave a cell at the same minute water arrives there, but he may never step into a cell that is flooded at the moment of arrival.)\nFind the minimum minute m at which Juan can stand on an E cell, or report TRAPPED if he can never reach one.",
+    "input_format": "The first line contains T. Each test case begins with a line containing R and C, followed by R lines of exactly C characters from .#SEW.",
+    "output_format": "For each test case print the minimum minute, or the word TRAPPED.",
+    "constraints": "1 \u2264 T \u2264 10\n1 \u2264 R, C \u2264 1000, and the sum of R \u00d7 C over all test cases is at most 10^6\nExactly one S per grid; any number (possibly zero) of E and W cells.",
+    "samples": [
+      {
+        "input": "2\n4 6\nW....E\n.#.##.\n.#S...\n......\n1 4\nWS.E\n",
+        "output": "5\n2\n"
+      },
+      {
+        "input": "2\n3 3\nS#E\n.#.\nW..\n1 1\nS\n",
+        "output": "TRAPPED\nTRAPPED\n"
+      }
+    ]
+  },
+  {
+    "letter": "G",
+    "title": "Toll Passes over the Davao River",
+    "id_line": "ID: G | Tier: Upper Intermediate | Core topics: Dijkstra's shortest path, state-expanded (layered) graphs, primitive priority queue",
+    "time_line": "Time limit: 2.0 s | Memory limit: 512 MB",
+    "statement": "A delivery rider for a Davao City food hub must bring an order from barangay 1 to barangay N. The city's road network has N barangays and M two-way roads, and in this (fictional) Davao every road, including the bridges over the Davao River, charges a toll. The hub gives the rider K free passes for the day. Using one pass on a road lets the rider cross it once without paying. Find the minimum total toll the rider must pay.\nFormally, road j connects barangays u_j and v_j and costs w_j every time it is traversed (in either direction). A route is a walk from barangay 1 to barangay N. For each traversal in the walk, the rider either pays its toll or spends one pass (making that traversal cost 0); at most K passes may be spent in total. Minimize the total amount paid.",
+    "input_format": "The first line contains N, M and K. Each of the next M lines contains u_j, v_j and w_j.",
+    "output_format": "Print the minimum total toll, or -1 if barangay N cannot be reached from barangay 1.",
+    "constraints": "2 \u2264 N \u2264 10^5, 1 \u2264 M \u2264 2 \u00d7 10^5, 0 \u2264 K \u2264 5\n1 \u2264 u_j, v_j \u2264 N, u_j \u2260 v_j; several roads may connect the same pair of barangays\n1 \u2264 w_j \u2264 10^9",
+    "samples": [
+      {
+        "input": "5 5 1\n1 2 4\n2 5 10\n1 3 2\n3 4 3\n4 5 7\n",
+        "output": "4\n"
+      },
+      {
+        "input": "4 2 2\n1 2 5\n3 4 5\n",
+        "output": "-1\n"
+      },
+      {
+        "input": "3 2 0\n1 2 1000000000\n2 3 1000000000\n",
+        "output": "2000000000\n"
+      }
+    ]
+  },
+  {
+    "letter": "H",
+    "title": "SMX Hall Bookings",
+    "id_line": "ID: H | Tier: Upper Intermediate | Core topics: weighted interval scheduling, 1D DP, sorting primitives, binary search, overflow on time arithmetic",
+    "time_line": "Time limit: 2.0 s | Memory limit: 512 MB",
+    "statement": "The main hall of a convention center in Lanang, Davao City receives N booking requests for the coming year: weddings, tech summits, school proms. Request i occupies the hall from time s_i to time e_i and pays p_i pesos. After each event the crew needs G time units to clean and reset the hall before the next event can start. The manager wants to accept a set of requests with the largest total payment.\nFormally, a set of requests is valid if for any two accepted requests i and j with s_i \u2264 s_j (and i \u2260 j), we have e_i + G \u2264 s_j. Find the maximum total payment of a valid set (the empty set is valid and pays 0).",
+    "input_format": "The first line contains N and G. Each of the next N lines contains s_i, e_i and p_i.",
+    "output_format": "Print the maximum total payment.",
+    "constraints": "1 \u2264 N \u2264 2 \u00d7 10^5\n0 \u2264 s_i < e_i \u2264 10^9\n0 \u2264 G \u2264 2 \u00d7 10^9\n1 \u2264 p_i \u2264 10^9",
+    "samples": [
+      {
+        "input": "5 1\n1 3 50\n2 5 20\n4 6 40\n6 9 70\n4 8 100\n",
+        "output": "150\n"
+      },
+      {
+        "input": "3 0\n1 2 5\n2 3 5\n3 4 5\n",
+        "output": "15\n"
+      },
+      {
+        "input": "2 2000000000\n0 1 7\n999999999 1000000000 9\n",
+        "output": "9\n"
+      }
+    ]
+  },
+  {
+    "letter": "I",
+    "title": "The Barangay Health Hub",
+    "id_line": "ID: I | Tier: Advanced | Core topics: tree DP with rerooting, iterative traversal (no recursion), 64-bit accumulation",
+    "time_line": "Time limit: 2.0 s | Memory limit: 512 MB",
+    "statement": "The provincial health office of Davao de Oro plans to build one vaccine-storage hub in one of its N barangays. The barangays are joined by N - 1 roads that form a tree (there is exactly one simple route between any two barangays). Every resident will travel to the hub once, so the office measures a candidate hub by the total travel distance of all residents. Find the best hub location(s).\nFormally, barangay u has population p_u, and road j joins u_j and v_j with length w_j. Let dist(u, h) be the total length of the unique route between u and h. The cost of hub h is\ncost(h) = \u03a3_u p_u \u00d7 dist(u, h).\nPrint the minimum cost and every barangay that attains it.",
+    "input_format": "The first line contains N.\nThe second line contains p_1, ..., p_N.\nEach of the next N - 1 lines contains u_j, v_j and w_j.",
+    "output_format": "Print the minimum cost on the first line. On the second line, print all barangays h with cost(h) equal to the minimum, in increasing order, separated by spaces.",
+    "constraints": "1 \u2264 N \u2264 2 \u00d7 10^5\n1 \u2264 p_u \u2264 1000\n1 \u2264 u_j, v_j \u2264 N, 1 \u2264 w_j \u2264 10^4, and the roads form a tree",
+    "samples": [
+      {
+        "input": "5\n3 1 2 1 4\n1 2 2\n1 3 1\n3 4 3\n3 5 1\n",
+        "output": "13\n3\n"
+      },
+      {
+        "input": "1\n7\n",
+        "output": "0\n1\n"
+      },
+      {
+        "input": "2\n5 5\n1 2 10000\n",
+        "output": "50000\n1 2\n"
+      }
+    ]
+  },
+  {
+    "letter": "J",
+    "title": "Agdao Market Price Board",
+    "id_line": "ID: J | Tier: Advanced | Core topics: segment tree with lazy propagation, (max, count) merging, allocation-free Java, fast I/O at 10^6 scale",
+    "time_line": "Time limit: 3.0 s | Memory limit: 1024 MB",
+    "statement": "The Agdao Public Market shows the price of each of its N fish stalls on a big electronic board. Market news moves prices in blocks: a typhoon warning raises prices for a whole row of stalls, a big catch from the Davao Gulf lowers them. Shoppers often ask the board two questions about a block of stalls: what is the highest price there, and how many stalls charge exactly that much? Your program drives the board.\nFormally, you are given a_1, ..., a_N and must process Q operations in order:\n1 l r x: add x to every a_i with l \u2264 i \u2264 r (x may be negative);\n2 l r: let M = max(a_l, ..., a_r); print M and the number of indices i in [l, r] with a_i = M.",
+    "input_format": "The first line contains N and Q.\nThe second line contains a_1, ..., a_N.\nEach of the next Q lines contains one operation in the format above.",
+    "output_format": "For each operation of type 2, print M and the count, separated by a space, on its own line.",
+    "constraints": "1 \u2264 N, Q \u2264 5 \u00d7 10^5\n-10^9 \u2264 a_i \u2264 10^9, -10^9 \u2264 x \u2264 10^9\n1 \u2264 l \u2264 r \u2264 N\n(Values can drift to about \u00b15 \u00d7 10^14 after many updates.)",
+    "samples": [
+      {
+        "input": "6 6\n5 3 5 1 2 5\n2 1 6\n1 2 4 2\n2 1 6\n2 2 4\n1 1 6 -1000000000\n2 3 5\n",
+        "output": "5 3\n7 1\n7 1\n-999999993 1\n"
+      },
+      {
+        "input": "3 4\n-1000000000 -1000000000 -1000000000\n1 1 3 -1000000000\n1 1 3 -1000000000\n2 1 3\n2 2 2\n",
+        "output": "-3000000000 3\n-3000000000 1\n"
+      }
+    ]
+  }
+]

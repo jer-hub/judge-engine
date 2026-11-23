@@ -13,11 +13,15 @@ import {
   formatApiErrorPayload,
 } from "@/lib/admin";
 import { ApiError, apiFetch } from "@/lib/api";
-
-import { AdminClarifications } from "./AdminClarifications";
-import { ContestResultsControls } from "./ContestResultsControls";
-import { IntegrityPanel } from "./IntegrityPanel";
-import { SimilarityPanel } from "./SimilarityPanel";
+import {
+  type ContestProblemRow,
+  formatDuration,
+  moveProblemRow,
+  parseUsernameList,
+  rosterChanges,
+  toLocalInputValue,
+  withLetters,
+} from "@/lib/contest-editor";
 import { fetchAllPages } from "@/lib/pagination";
 import type {
   AdminUser,
@@ -25,6 +29,15 @@ import type {
   ContestEditorPhase,
   ProblemListItem,
 } from "@/lib/types";
+
+import { AdminClarifications } from "./AdminClarifications";
+import { ContestExportsBar } from "./ContestExportsBar";
+import { ContestParticipantsEditor } from "./ContestParticipantsEditor";
+import { ContestProblemSetEditor } from "./ContestProblemSetEditor";
+import { ContestResultsControls } from "./ContestResultsControls";
+import { ContestSetupFields } from "./ContestSetupFields";
+import { IntegrityPanel } from "./IntegrityPanel";
+import { SimilarityPanel } from "./SimilarityPanel";
 
 type Props = {
   contestId: number;
@@ -34,63 +47,11 @@ type Props = {
   onViewSubmissions?: () => void;
 };
 
-type ProblemRow = {
-  problem_id: number;
-  letter: string;
-  display_order: number;
-  points: number;
-};
-
-const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
-
-function withLetters(
-  rows: Array<{ problem_id: number; points?: number }>,
-): ProblemRow[] {
-  return rows.map((r, i) => ({
-    problem_id: r.problem_id,
-    points: r.points ?? 100,
-    letter: LETTERS[i] || `P${i + 1}`,
-    display_order: i,
-  }));
-}
-
-function toLocalInputValue(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function formatDuration(startIso: string, endIso: string): string | null {
-  const start = new Date(startIso);
-  const end = new Date(endIso);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
-    return null;
-  }
-  const mins = Math.round((end.getTime() - start.getTime()) / 60_000);
-  if (mins < 60) return `${mins} min`;
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return m ? `${h}h ${m}m` : `${h}h`;
-}
-
-function parseUsernameList(raw: string): string[] {
-  const parts = raw
-    .split(/[\s,;]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return Array.from(new Set(parts));
-}
-
-/** The roster edits made in the form, as the API's add/remove lists. */
-function rosterChanges(saved: string[], current: string[]) {
-  const before = new Set(saved);
-  const after = new Set(current);
-  const add = current.filter((name) => !before.has(name));
-  const remove = saved.filter((name) => !after.has(name));
-  return {
-    ...(add.length > 0 && { participants_add: add }),
-    ...(remove.length > 0 && { participants_remove: remove }),
-  };
-}
+const PHASES: Array<{ id: ContestEditorPhase; label: string }> = [
+  { id: "setup", label: "Setup" },
+  { id: "live", label: "Live" },
+  { id: "exports", label: "Exports" },
+];
 
 export function ContestEditor({
   contestId,
@@ -103,8 +64,6 @@ export function ContestEditor({
   const rootRef = useRef<HTMLFormElement>(null);
   const closeAfterRef = useRef(false);
   const isDirtyRef = useRef(false);
-  // The roster as last loaded from the server. Saves send only the changes
-  // against it, so students who self-register meanwhile are not removed.
   const savedParticipantsRef = useRef<string[]>([]);
   const savedMsgTimerRef = useRef<number | null>(null);
   const [pendingClose, setPendingClose] = useState(false);
@@ -120,11 +79,8 @@ export function ContestEditor({
   const [practiceAfterEnd, setPracticeAfterEnd] = useState(false);
   const [integrityMonitoring, setIntegrityMonitoring] = useState(true);
   const [integrityStrict, setIntegrityStrict] = useState(false);
-  const [problems, setProblems] = useState<ProblemRow[]>([]);
+  const [problems, setProblems] = useState<ContestProblemRow[]>([]);
   const [participantSet, setParticipantSet] = useState<string[]>([]);
-  const [rosterSearch, setRosterSearch] = useState("");
-  const [problemSearch, setProblemSearch] = useState("");
-  const [pasteBuffer, setPasteBuffer] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [exportSection, setExportSection] = useState("");
@@ -182,8 +138,7 @@ export function ContestEditor({
   }, [contestId]);
 
   useEffect(() => {
-    if (!detail.data) return;
-    if (isDirtyRef.current) return;
+    if (!detail.data || isDirtyRef.current) return;
     hydrateFrom(detail.data);
   }, [detail.data]);
 
@@ -191,16 +146,6 @@ export function ContestEditor({
     return () => {
       if (savedMsgTimerRef.current) window.clearTimeout(savedMsgTimerRef.current);
     };
-  }, []);
-
-  useEffect(() => {
-    const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (!isDirtyRef.current) return;
-      e.preventDefault();
-      e.returnValue = "";
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, []);
 
   useEffect(() => {
@@ -221,7 +166,6 @@ export function ContestEditor({
     return map;
   }, [roster.data]);
 
-  // Sections of the saved participants, for the standings export filter.
   const participantSections = useMemo(() => {
     const sections = new Set<string>();
     for (const p of detail.data?.participants ?? []) {
@@ -230,6 +174,14 @@ export function ContestEditor({
     }
     return [...sections].sort((a, b) => a.localeCompare(b));
   }, [detail.data, rosterUsernames]);
+
+  const unknownParticipants = useMemo(() => {
+    if (!roster.isSuccess) return [];
+    const saved = new Set(savedParticipantsRef.current);
+    return participantSet.filter(
+      (name) => !saved.has(name) && !rosterUsernames.has(name.toLowerCase()),
+    );
+  }, [participantSet, rosterUsernames, roster.isSuccess]);
 
   async function exportStandings() {
     setExporting(true);
@@ -271,17 +223,6 @@ export function ContestEditor({
       );
     },
   });
-
-  // Only names added in this form can be unknown: saved participants exist.
-  // Until the roster loads nothing is flagged; the server validates anyway.
-  const unknownParticipants = useMemo(() => {
-    if (!roster.isSuccess) return [];
-    const saved = new Set(savedParticipantsRef.current);
-    return participantSet.filter(
-      (name) => !saved.has(name) && !rosterUsernames.has(name.toLowerCase()),
-    );
-  }, [participantSet, rosterUsernames, roster.isSuccess]);
-  const unknownSet = useMemo(() => new Set(unknownParticipants), [unknownParticipants]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -367,13 +308,7 @@ export function ContestEditor({
 
   function moveProblem(idx: number, dir: -1 | 1) {
     markDirty();
-    setProblems((prev) => {
-      const j = idx + dir;
-      if (j < 0 || j >= prev.length) return prev;
-      const next = [...prev];
-      [next[idx], next[j]] = [next[j], next[idx]];
-      return withLetters(next);
-    });
+    setProblems((prev) => moveProblemRow(prev, idx, dir));
   }
 
   function addAllPublished() {
@@ -405,14 +340,13 @@ export function ContestEditor({
       const key = username.toLowerCase();
       const exists = prev.some((u) => u.toLowerCase() === key);
       if (exists) return prev.filter((u) => u.toLowerCase() !== key);
-      const canonical =
-        rosterUsernames.get(key)?.username ?? username.trim();
+      const canonical = rosterUsernames.get(key)?.username ?? username.trim();
       return [...prev, canonical].sort((a, b) => a.localeCompare(b));
     });
   }
 
-  function applyPaste() {
-    const names = parseUsernameList(pasteBuffer);
+  function applyPaste(raw: string) {
+    const names = parseUsernameList(raw);
     if (names.length === 0) return;
     markDirty();
     setParticipantSet((prev) => {
@@ -424,32 +358,7 @@ export function ContestEditor({
       }
       return Array.from(map.values()).sort((a, b) => a.localeCompare(b));
     });
-    setPasteBuffer("");
   }
-
-  const usedIds = new Set(problems.map((p) => p.problem_id));
-  const available = (catalog.data?.results ?? []).filter((p) => !usedIds.has(p.id));
-  const filteredAvailable = available.filter((p) => {
-    const q = problemSearch.trim().toLowerCase();
-    if (!q) return true;
-    return p.title.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q);
-  });
-
-  const filteredRoster = (roster.data?.results ?? []).filter((u) => {
-    const q = rosterSearch.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      u.username.toLowerCase().includes(q) ||
-      u.class_section.toLowerCase().includes(q) ||
-      u.school_id.toLowerCase().includes(q)
-    );
-  });
-
-  const durationLabel = formatDuration(startTime, endTime);
-  const displayTitle = title.trim() || detail.data?.title || `Contest #${contestId}`;
-  const statusLabel = detail.data?.status ?? "…";
-  const checklistIncomplete =
-    problems.length === 0 || participantSet.length === 0;
 
   function requestClose() {
     if (isDirtyRef.current) {
@@ -459,11 +368,10 @@ export function ContestEditor({
     onClose();
   }
 
-  const phases: Array<{ id: ContestEditorPhase; label: string }> = [
-    { id: "setup", label: "Setup" },
-    { id: "live", label: "Live" },
-    { id: "exports", label: "Exports" },
-  ];
+  const durationLabel = formatDuration(startTime, endTime);
+  const displayTitle = title.trim() || detail.data?.title || `Contest #${contestId}`;
+  const statusLabel = detail.data?.status ?? "…";
+  const checklistIncomplete = problems.length === 0 || participantSet.length === 0;
 
   return (
     <form
@@ -524,7 +432,7 @@ export function ContestEditor({
           aria-label="Contest workspace"
           className="flex flex-wrap gap-1"
         >
-          {phases.map((p) => (
+          {PHASES.map((p) => (
             <button
               key={p.id}
               type="button"
@@ -593,488 +501,128 @@ export function ContestEditor({
       )}
 
       {phase === "exports" && (
-        <div className="flex flex-wrap items-center gap-2 rounded-sm border border-slate-800 bg-slate-900/40 p-3 text-xs">
-          <span className="text-slate-400">Results</span>
-          <select
-            aria-label="Section to export"
-            className="rounded-sm border border-slate-700 bg-slate-900 px-2 py-1"
-            value={exportSection}
-            onChange={(e) => setExportSection(e.target.value)}
-          >
-            <option value="">All sections</option>
-            {participantSections.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => void exportStandings()}
-            disabled={exporting}
-            className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
-          >
-            {exporting ? "Exporting…" : "Export standings (CSV)"}
-          </button>
-          <button
-            type="button"
-            onClick={() => void exportSolutions()}
-            disabled={exportingSolutions}
-            title="Every submitted solution as .java files per student and problem, plus index.csv"
-            className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-emerald-300 transition hover:bg-slate-800 disabled:opacity-50"
-          >
-            {exportingSolutions ? "Preparing…" : "Download solutions (ZIP)"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmRejudge(true)}
-            disabled={rejudgeMutation.isPending}
-            className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1 text-amber-300 transition hover:bg-slate-800 disabled:opacity-50"
-          >
-            Rejudge contest
-          </button>
-        </div>
+        <ContestExportsBar
+          exportSection={exportSection}
+          onExportSectionChange={setExportSection}
+          participantSections={participantSections}
+          exporting={exporting}
+          onExportStandings={() => void exportStandings()}
+          exportingSolutions={exportingSolutions}
+          onExportSolutions={() => void exportSolutions()}
+          rejudgePending={rejudgeMutation.isPending}
+          onRequestRejudge={() => setConfirmRejudge(true)}
+        />
       )}
 
       {phase === "setup" && (
-      <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-sm sm:col-span-2">
-          <span className="mb-1 block text-slate-400">Title</span>
-          <input
-            className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
-            value={title}
-            onChange={(e) => {
+        <>
+          <ContestSetupFields
+            title={title}
+            onTitleChange={(v) => {
               markDirty();
-              setTitle(e.target.value);
+              setTitle(v);
             }}
-            required
-          />
-        </label>
-        <label className="block text-sm sm:col-span-2">
-          <span className="mb-1 block text-slate-400">Description</span>
-          <textarea
-            className="min-h-[72px] w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2 text-sm"
-            value={description}
-            onChange={(e) => {
+            description={description}
+            onDescriptionChange={(v) => {
               markDirty();
-              setDescription(e.target.value);
+              setDescription(v);
             }}
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-400">Start</span>
-          <input
-            type="datetime-local"
-            className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
-            value={startTime}
-            onChange={(e) => {
+            startTime={startTime}
+            onStartTimeChange={(v) => {
               markDirty();
-              setStartTime(e.target.value);
+              setStartTime(v);
             }}
-            required
-          />
-        </label>
-        <label className="block text-sm">
-          <span className="mb-1 flex flex-wrap items-center justify-between gap-2 text-slate-400">
-            <span>End</span>
-            {durationLabel && (
-              <span className="text-xs text-slate-500">Duration {durationLabel}</span>
-            )}
-          </span>
-          <input
-            type="datetime-local"
-            className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
-            value={endTime}
-            onChange={(e) => {
+            endTime={endTime}
+            onEndTimeChange={(v) => {
               markDirty();
-              setEndTime(e.target.value);
+              setEndTime(v);
             }}
-            required
+            durationLabel={durationLabel}
+            onApplyDurationHours={applyDurationHours}
+            freeze={freeze}
+            onFreezeChange={(v) => {
+              markDirty();
+              setFreeze(v);
+            }}
+            isPublic={isPublic}
+            onIsPublicChange={(v) => {
+              markDirty();
+              setIsPublic(v);
+            }}
+            holdResults={holdResults}
+            onHoldResultsChange={(v) => {
+              markDirty();
+              setHoldResults(v);
+            }}
+            practiceAfterEnd={practiceAfterEnd}
+            onPracticeAfterEndChange={(v) => {
+              markDirty();
+              setPracticeAfterEnd(v);
+            }}
+            integrityMonitoring={integrityMonitoring}
+            onIntegrityMonitoringChange={(v) => {
+              markDirty();
+              setIntegrityMonitoring(v);
+            }}
+            integrityStrict={integrityStrict}
+            onIntegrityStrictChange={(v) => {
+              markDirty();
+              setIntegrityStrict(v);
+            }}
           />
-        </label>
-        <div className="flex flex-wrap gap-2 sm:col-span-2">
-          <span className="self-center text-xs text-slate-500">Length from start:</span>
-          {[1, 2, 3].map((h) => (
+
+          <ContestProblemSetEditor
+            problems={problems}
+            catalogProblems={catalog.data?.results ?? []}
+            onAddProblem={addProblem}
+            onRemoveProblem={removeProblem}
+            onMoveProblem={moveProblem}
+            onAddAllPublished={addAllPublished}
+          />
+
+          <ContestParticipantsEditor
+            participantSet={participantSet}
+            unknownParticipants={unknownParticipants}
+            rosterUsers={roster.data?.results ?? []}
+            rosterLoading={roster.isLoading}
+            onToggleParticipant={toggleParticipant}
+            onApplyPaste={applyPaste}
+          />
+
+          <div className="sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-wrap items-center gap-2 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur-sm">
             <button
-              key={h}
-              type="button"
-              onClick={() => applyDurationHours(h)}
-              aria-label={`Set contest length to ${h} hour${h === 1 ? "" : "s"} from start`}
-              className="cursor-pointer rounded-sm border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
+              type="submit"
+              disabled={saveMutation.isPending}
+              className="cursor-pointer rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
             >
-              {h}h
+              {saveMutation.isPending && !pendingClose ? "Saving…" : "Save"}
             </button>
-          ))}
-        </div>
-        <label className="block text-sm">
-          <span className="mb-1 block text-slate-400">Freeze (min before end)</span>
-          <input
-            type="number"
-            min={0}
-            className="w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-2"
-            value={freeze}
-            onChange={(e) => {
-              markDirty();
-              setFreeze(Number(e.target.value));
-            }}
-          />
-          <span className="mt-1 block text-xs text-slate-500">
-            0 = never freeze. 60 = hide new solves in the last hour.
-          </span>
-        </label>
-        <label className="flex flex-col gap-1 self-end text-sm">
-          <span className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={isPublic}
-              onChange={(e) => {
-                markDirty();
-                setIsPublic(e.target.checked);
-              }}
-              className="cursor-pointer"
-            />
-            <span>Public — anyone can see &amp; register</span>
-          </span>
-          <span className="text-xs text-slate-500">
-            Uncheck for invite-only (use the participants list below).
-          </span>
-        </label>
-        <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-          <span className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={holdResults}
-              onChange={(e) => {
-                markDirty();
-                setHoldResults(e.target.checked);
-              }}
-              className="cursor-pointer"
-            />
-            <span>Keep the scoreboard frozen after the end until I reveal it</span>
-          </span>
-          <span className="text-xs text-slate-500">
-            For an announcement, or while students with extra time are still working. Reveal
-            below.
-          </span>
-        </label>
-        <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-          <span className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={practiceAfterEnd}
-              onChange={(e) => {
-                markDirty();
-                setPracticeAfterEnd(e.target.checked);
-              }}
-              className="cursor-pointer"
-            />
-            <span>Open its problems for practice after the contest</span>
-          </span>
-          <span className="text-xs text-slate-500">
-            Leave off if you will reuse these problems. Practice stays closed while any contest
-            using them is still running.
-          </span>
-        </label>
-        <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-          <span className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={integrityMonitoring}
-              onChange={(e) => {
-                markDirty();
-                setIntegrityMonitoring(e.target.checked);
-              }}
-              className="cursor-pointer"
-            />
-            <span>Log integrity signals (focus / paste / submit IP)</span>
-          </span>
-          <span className="text-xs text-slate-500">
-            Warn-only leads for teachers — never auto-penalizes. Students see a one-time notice.
-          </span>
-        </label>
-        <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-          <span className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={integrityStrict}
-              disabled={!integrityMonitoring}
-              onChange={(e) => {
-                markDirty();
-                setIntegrityStrict(e.target.checked);
-              }}
-              className="cursor-pointer"
-            />
-            <span>Strict: fullscreen + confirm before submit after leaving</span>
-          </span>
-          <span className="text-xs text-slate-500">
-            Soft-blocks Submit until a teacher unlocks the student (Integrity panel). Not an
-            automatic DQ; requires monitoring to be on.
-          </span>
-        </label>
-      </div>
-      )}
-
-      {phase === "live" && (
-        <div className="space-y-3">
-          {detail.data && <ContestResultsControls contest={detail.data} />}
-          {detail.data && <AdminClarifications contestId={detail.data.id} />}
-          {detail.data && <IntegrityPanel contestId={detail.data.id} />}
-          {detail.data && <SimilarityPanel contestId={detail.data.id} />}
-        </div>
-      )}
-
-      {phase === "setup" && (
-      <>
-      <div>
-        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-          <h5 className="text-sm font-medium text-slate-200">
-            Problem set{" "}
-            <span className="font-normal text-slate-500">({problems.length})</span>
-          </h5>
-          <button
-            type="button"
-            onClick={addAllPublished}
-            className="cursor-pointer text-xs text-emerald-300 hover:underline"
-          >
-            Add all published
-          </button>
-        </div>
-        <p className="mb-2 text-xs text-slate-500">
-          Unpublished problems can still be solved during this contest by registered students.
-          Order = letters A, B, C…
-        </p>
-
-        {problems.length === 0 ? (
-          <p className="mb-3 rounded-sm border border-dashed border-slate-700 px-3 py-4 text-center text-xs text-slate-500">
-            No problems yet — pick from the list below.
-          </p>
-        ) : (
-          <ul className="mb-3 space-y-2">
-            {problems.map((row, idx) => {
-              const meta = catalog.data?.results.find((p) => p.id === row.problem_id);
-              return (
-                <li
-                  key={row.problem_id}
-                  className="flex flex-wrap items-center gap-2 rounded-sm border border-slate-800 px-3 py-2 text-xs"
-                >
-                  <span className="w-6 font-mono font-semibold text-emerald-300">
-                    {row.letter}
-                  </span>
-                  <span className="flex-1 text-slate-300">
-                    {meta?.title || `Problem #${row.problem_id}`}
-                    {meta && !meta.is_published && (
-                      <span className="ml-2 text-amber-400">draft</span>
-                    )}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      aria-label="Move up"
-                      disabled={idx === 0}
-                      onClick={() => moveProblem(idx, -1)}
-                      className="cursor-pointer rounded-sm border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Move down"
-                      disabled={idx === problems.length - 1}
-                      onClick={() => moveProblem(idx, 1)}
-                      className="cursor-pointer rounded-sm border border-slate-700 px-2 py-0.5 text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeProblem(idx)}
-                      aria-label={`Remove problem ${row.letter}`}
-                      className="cursor-pointer px-2 text-red-300 hover:text-red-200"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        <input
-          className="mb-2 w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm"
-          placeholder="Search problems to add…"
-          aria-label="Search problems to add"
-          value={problemSearch}
-          onChange={(e) => setProblemSearch(e.target.value)}
-        />
-        <ul
-          aria-label="Problems available to add"
-          className="max-h-40 space-y-1 overflow-y-auto rounded-sm border border-slate-800 p-2"
-        >
-          {filteredAvailable.length === 0 ? (
-            <li className="px-2 py-1 text-xs text-slate-500">
-              {available.length === 0 ? "All problems are already added." : "No matches."}
-            </li>
-          ) : (
-            filteredAvailable.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onClick={() => addProblem(p.id)}
-                  className="flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800"
-                >
-                  <span>
-                    {p.title}
-                    {!p.is_published && (
-                      <span className="ml-2 text-amber-400">draft</span>
-                    )}
-                  </span>
-                  <span className="text-emerald-400">Add</span>
-                </button>
-              </li>
-            ))
-          )}
-        </ul>
-      </div>
-
-      <div>
-        <h5 className="mb-1 text-sm font-medium text-slate-200">
-          Participants{" "}
-          <span className="font-normal text-slate-500">
-            ({participantSet.length} invited)
-          </span>
-        </h5>
-        <p className="mb-2 text-xs text-slate-500">
-          Pre-register students from the roster. They can also self-register if the contest is
-          public.
-        </p>
-
-        {participantSet.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1.5">
-            {participantSet.map((name) => {
-              const unknown = unknownSet.has(name);
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => toggleParticipant(name)}
-                  title="Click to remove"
-                  aria-label={`Remove participant ${name}`}
-                  className={`cursor-pointer rounded-full px-2.5 py-0.5 text-xs ${
-                    unknown
-                      ? "bg-amber-950/60 text-amber-200 ring-1 ring-amber-700"
-                      : "bg-slate-800 text-slate-200 hover:bg-slate-700"
-                  }`}
-                >
-                  {name} ×
-                </button>
-              );
-            })}
+            <button
+              type="button"
+              disabled={saveMutation.isPending}
+              onClick={() => save(true)}
+              className="cursor-pointer rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:border-slate-400 disabled:opacity-60"
+            >
+              {saveMutation.isPending && pendingClose ? "Saving…" : "Save & close"}
+            </button>
+            <button
+              type="button"
+              onClick={requestClose}
+              className="cursor-pointer px-3 py-2 text-sm text-slate-400 hover:text-white"
+            >
+              Cancel
+            </button>
           </div>
-        )}
-
-        {unknownParticipants.length > 0 && (
-          <p className="mb-2 text-xs text-amber-300">
-            Highlighted names are not in the roster — remove them before saving.
-          </p>
-        )}
-
-        <input
-          className="mb-2 w-full rounded-sm border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm"
-          placeholder="Search roster (username, class, school id)…"
-          aria-label="Search roster by username, class, or school id"
-          value={rosterSearch}
-          onChange={(e) => setRosterSearch(e.target.value)}
-        />
-        <ul
-          aria-label="User roster"
-          className="mb-2 max-h-44 space-y-1 overflow-y-auto rounded-sm border border-slate-800 p-2"
-        >
-          {roster.isLoading && (
-            <li className="px-2 py-1 text-xs text-slate-500">Loading roster…</li>
-          )}
-          {!roster.isLoading && filteredRoster.length === 0 && (
-            <li className="px-2 py-1 text-xs text-slate-500">No users match.</li>
-          )}
-          {filteredRoster.map((u) => {
-            const selected = participantSet.some(
-              (n) => n.toLowerCase() === u.username.toLowerCase(),
-            );
-            return (
-              <li key={u.id}>
-                <button
-                  type="button"
-                  onClick={() => toggleParticipant(u.username)}
-                  aria-pressed={selected}
-                  aria-label={`${selected ? "Remove" : "Add"} ${u.username}`}
-                  className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs hover:bg-slate-800 ${
-                    selected ? "bg-emerald-950/40 text-emerald-200" : "text-slate-300"
-                  }`}
-                >
-                  <span>
-                    {u.username}
-                    {u.class_section && (
-                      <span className="ml-2 text-slate-500">{u.class_section}</span>
-                    )}
-                  </span>
-                  <span className="text-slate-500">{selected ? "Added" : "Add"}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-
-        <div className="flex flex-wrap gap-2">
-          <input
-            className="min-w-[200px] flex-1 rounded-sm border border-slate-700 bg-slate-900 px-3 py-1.5 font-mono text-xs"
-            placeholder="Paste usernames (comma or space separated)"
-            aria-label="Paste usernames separated by comma or space"
-            value={pasteBuffer}
-            onChange={(e) => setPasteBuffer(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                applyPaste();
-              }
-            }}
-          />
-          <button
-            type="button"
-            onClick={applyPaste}
-            className="cursor-pointer rounded-sm border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
-          >
-            Add pasted
-          </button>
-        </div>
-      </div>
-      </>
+        </>
       )}
 
-      {phase === "setup" && (
-      <div className="sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-wrap items-center gap-2 border-t border-slate-800 bg-slate-950/95 px-4 py-3 backdrop-blur-sm">
-        <button
-          type="submit"
-          disabled={saveMutation.isPending}
-          className="cursor-pointer rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-60"
-        >
-          {saveMutation.isPending && !pendingClose ? "Saving…" : "Save"}
-        </button>
-        <button
-          type="button"
-          disabled={saveMutation.isPending}
-          onClick={() => save(true)}
-          className="cursor-pointer rounded-lg border border-slate-600 px-4 py-2 text-sm text-slate-200 hover:border-slate-400 disabled:opacity-60"
-        >
-          {saveMutation.isPending && pendingClose ? "Saving…" : "Save & close"}
-        </button>
-        <button
-          type="button"
-          onClick={requestClose}
-          className="cursor-pointer px-3 py-2 text-sm text-slate-400 hover:text-white"
-        >
-          Cancel
-        </button>
-      </div>
+      {phase === "live" && detail.data && (
+        <div className="space-y-3">
+          <ContestResultsControls contest={detail.data} />
+          <AdminClarifications contestId={detail.data.id} />
+          <IntegrityPanel contestId={detail.data.id} />
+          <SimilarityPanel contestId={detail.data.id} />
+        </div>
       )}
     </form>
   );

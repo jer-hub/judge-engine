@@ -75,6 +75,10 @@ if env.bool("DJANGO_BEHIND_TLS_PROXY", default=False):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=31_536_000)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=True)
+
+SESSION_COOKIE_SAMESITE = "Lax"
 
 if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -103,6 +107,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "config.security.ContentSecurityPolicyMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -289,6 +294,13 @@ JUDGE_STALE_SECONDS = env("JUDGE_STALE_SECONDS")
 # SystemError (and is retried by the sweep) instead of blocking a worker.
 JUDGE_TASK_SOFT_LIMIT_S = env("JUDGE_TASK_SOFT_LIMIT_S")
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6379/0")
+
+if not DEBUG and not env.bool("DJANGO_ALLOW_INSECURE_REDIS", default=False):
+    from config.security import validate_redis_url_for_production
+
+    validate_redis_url_for_production(REDIS_URL, "REDIS_URL")
+    validate_redis_url_for_production(CELERY_BROKER_URL, "CELERY_BROKER_URL")
+    validate_redis_url_for_production(CELERY_RESULT_BACKEND, "CELERY_RESULT_BACKEND")
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = (
     JUDGE_SOURCE_MAX_BYTES + JUDGE_STDIN_MAX_BYTES + 1024 * 64

@@ -94,3 +94,25 @@ class ContestProblemVisibilityTests(APITestCase):
         ContestParticipant.objects.filter(contest=self.contest, user=self.player).update(extra_minutes=30)
         self.assertEqual(self._slugs(self.outsider), {"free"})
         self.assertEqual(self._statement(self.player), 200)
+
+    def test_problem_detail_includes_active_contests_for_registered_player(self):
+        """Problem detail exposes the viewer's running contest(s) so UI can warn when ?contest= is missing."""
+        self._as(self.player)
+        resp = self.client.get(f"/api/problems/{self.problem.slug}/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            resp.data.get("active_contests"),
+            [{"id": self.contest.id, "title": "Quiz", "letter": "A"}],
+        )
+
+        # Free problem not in any contest returns empty list
+        free_resp = self.client.get(f"/api/problems/{self.free.slug}/")
+        self.assertEqual(free_resp.status_code, 200)
+        self.assertEqual(free_resp.data.get("active_contests"), [])
+
+        # Once contest ends for player, active_contests is empty
+        now = timezone.now()
+        Contest.objects.filter(pk=self.contest.pk).update(end_time=now - timedelta(minutes=5))
+        ended_resp = self.client.get(f"/api/problems/{self.problem.slug}/")
+        self.assertEqual(ended_resp.status_code, 200)
+        self.assertEqual(ended_resp.data.get("active_contests"), [])

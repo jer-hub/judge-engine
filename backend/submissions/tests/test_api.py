@@ -172,3 +172,24 @@ public class Solution {
     def test_no_public_register_endpoint(self):
         resp = self.client.post("/api/auth/register/", {"username": "x"}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_filter_submissions_by_status(self):
+        ac = Submission.objects.create(
+            user=self.student,
+            problem=self.problem,
+            source_code="class Solution {}",
+            status=Submission.Status.ACCEPTED,
+        )
+        Submission.objects.create(
+            user=self.student,
+            problem=self.problem,
+            source_code="class Solution {}",
+            status=Submission.Status.WRONG_ANSWER,
+        )
+        self._auth(self.student)
+        resp = self.client.get(reverse("submission-list") + "?user=me&status=Accepted")
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.assertEqual([s["id"] for s in resp.data["results"]], [ac.id])
+
+        bad = self.client.get(reverse("submission-list") + "?user=me&status=not-a-verdict")
+        self.assertEqual(bad.status_code, status.HTTP_400_BAD_REQUEST)

@@ -41,6 +41,7 @@ export function CodeEditor({ value, onChange, onPasteChars }: Props) {
           });
         }}
         options={{
+          ariaLabel: "Java solution editor",
           minimap: { enabled: false },
           fontSize: 14,
           scrollBeyondLastLine: false,
